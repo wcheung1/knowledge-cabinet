@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta property="og:title" content="文章內容 - Knowledge Cabinet">
+    <meta property="og:description" content="點擊進入查看此文章的詳細內容。">
+    <meta property="og:type" content="website">
     <title>文章內容 - Knowledge Cabinet</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -13,7 +16,6 @@
         body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; padding: 20px; line-height: 1.6; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         
-        /* 麵包屑導航樣式 */
         .breadcrumbs { font-size: 14px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ecf0f1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #7f8c8d; }
         .breadcrumbs a { color: #3498db; text-decoration: none; font-weight: bold; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
         .breadcrumbs a:hover { text-decoration: underline; color: #2980b9; }
@@ -49,8 +51,14 @@
         .box-content a { color: #e74c3c; font-weight: bold; text-decoration: underline; cursor: pointer; background: #fdf2f1; padding: 2px 6px; border-radius: 4px; }
 
         .box-toolbar { background: #e8f4f8; padding: 6px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; }
-        .drag-handle { cursor: grab; font-size: 16px; color: #34495e; font-weight: bold; padding: 0 10px; user-select: none; }
+        .left-group { display: flex; align-items: center; gap: 10px; }
+        .drag-handle { cursor: grab; font-size: 16px; color: #34495e; font-weight: bold; user-select: none; }
         .drag-handle:active { cursor: grabbing; }
+        
+        /* 新增：預設狀態切換按鈕樣式 */
+        .btn-state { background: #3498db; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-state.collapsed { background: #95a5a6; } /* 縮埋狀態變灰色 */
+        
         .btn-delete-box { background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; }
         .btn-delete-box:hover { background: #c0392b; }
     </style>
@@ -58,7 +66,6 @@
 <body>
     <div class="container" id="mainContainer">
         
-        <!-- 動態麵包屑導航 -->
         <div class="breadcrumbs" id="breadcrumbsContainer">
             載入導航路徑中...
         </div>
@@ -140,25 +147,21 @@
             else auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => alert(err.message));
         });
 
-        // 構建麵包屑導航 (遞迴追溯)
         async function buildBreadcrumbs(currentId) {
             let pathChain = [];
             let current = currentId;
             
-            // 向上追溯到 index 或者盡頭
             while(current && current !== 'index') {
                 pathChain.unshift(current);
                 const snap = await db.ref('page_parents/' + current).once('value');
-                current = snap.val(); // 取得上一層 ID
+                current = snap.val();
             }
             
-            // 獲取總目錄標題
             const indexSnap = await db.ref('main_title').once('value');
             const mainTitleText = indexSnap.exists() ? indexSnap.val() : "總目錄";
             
             let html = `<a href="index.html" title="${mainTitleText}">${mainTitleText}</a>`;
             
-            // 獲取所有祖先層級嘅標題
             for (let i = 0; i < pathChain.length; i++) {
                 const id = pathChain[i];
                 const tSnap = await db.ref('page_titles/' + id).once('value');
@@ -166,7 +169,6 @@
                 
                 html += ` &nbsp;❯&nbsp; `;
                 if (i === pathChain.length - 1) {
-                    // 最後一個係目前頁面，唔可以 click
                     html += `<span title="${titleText}">${titleText}</span>`;
                 } else {
                     html += `<a href="page.html?id=${id}" title="${titleText}">${titleText}</a>`;
@@ -175,7 +177,7 @@
             breadcrumbsContainer.innerHTML = html;
         }
 
-        buildBreadcrumbs(pageId); // 執行構建
+        buildBreadcrumbs(pageId); 
 
         db.ref('page_titles/' + pageId).on('value', snap => {
             if (!isEditing) {
@@ -183,7 +185,6 @@
                     pageMainTitle.innerHTML = snap.val();
                     pageMainTitle.style.display = "inline-block";
                     document.title = pageMainTitle.innerText.trim() + " - Knowledge Cabinet";
-                    // 標題更新時，重刷麵包屑
                     buildBreadcrumbs(pageId); 
                 } else {
                     pageMainTitle.style.display = "none";
@@ -237,21 +238,56 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
+        // --- 核心更新：工具列加入狀態切換按鈕 ---
         function addToolbarToBox(box) {
             if (!box.querySelector('.box-toolbar')) {
                 const toolbar = document.createElement('div'); toolbar.className = 'box-toolbar'; toolbar.setAttribute('contenteditable', 'false');
-                const dragHandle = document.createElement('span'); dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
                 
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'left-group';
+
+                const dragHandle = document.createElement('span'); dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
                 dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
                 dragHandle.addEventListener('mouseup', () => box.setAttribute('draggable', 'false'));
                 dragHandle.addEventListener('mouseleave', () => box.setAttribute('draggable', 'false'));
+
+                // 新增：訪客預設狀態切換掣
+                const stateBtn = document.createElement('button');
+                stateBtn.className = 'btn-state';
+                
+                // 檢查 Box 目前係咪展開 (active)
+                if (box.classList.contains('active')) {
+                    stateBtn.innerHTML = '👀 訪客預設：展開';
+                } else {
+                    stateBtn.innerHTML = '👀 訪客預設：縮埋';
+                    stateBtn.classList.add('collapsed');
+                }
+                
+                // 按下按鈕時，切換狀態
+                stateBtn.onclick = function() {
+                    if (box.classList.contains('active')) {
+                        box.classList.remove('active');
+                        stateBtn.innerHTML = '👀 訪客預設：縮埋';
+                        stateBtn.classList.add('collapsed');
+                    } else {
+                        box.classList.add('active');
+                        stateBtn.innerHTML = '👀 訪客預設：展開';
+                        stateBtn.classList.remove('collapsed');
+                    }
+                };
 
                 box.addEventListener('dragstart', () => box.classList.add('dragging'));
                 box.addEventListener('dragend', () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); });
 
                 const delBtn = document.createElement('button'); delBtn.className = 'btn-delete-box'; delBtn.innerHTML = '🗑️ 刪除';
                 delBtn.onclick = function() { if(confirm('確定要刪除？')) box.remove(); };
-                toolbar.appendChild(dragHandle); toolbar.appendChild(delBtn); box.insertBefore(toolbar, box.firstChild);
+                
+                leftGroup.appendChild(dragHandle);
+                leftGroup.appendChild(stateBtn);
+                
+                toolbar.appendChild(leftGroup); 
+                toolbar.appendChild(delBtn); 
+                box.insertBefore(toolbar, box.firstChild);
             }
         }
 
@@ -288,7 +324,6 @@
                 let customId = prompt("請設定專屬 ID (例如：ai-part2)。\n留空將自動生成帶有 Prefix 嘅 ID：", "");
                 if (customId === null) return null;
                 
-                // 自動帶入目前 pageId 作為 Prefix
                 let tempId = customId.trim() !== "" 
                     ? customId.trim().toLowerCase().replace(/\s+/g, '-') 
                     : pageId + '_' + Math.random().toString(36).substr(2, 6);
@@ -303,7 +338,6 @@
 
             const finalId = await getValidId(); if (!finalId) return;
 
-            // 紀錄父層級關係 (非常重要，麵包屑全靠佢)
             db.ref('page_parents/' + finalId).set(pageId);
 
             const selectedText = selection.toString().trim();
@@ -326,7 +360,7 @@
             db.ref('page_titles/' + pageId).set(titleText);
             db.ref('pages/' + pageId).set(cabinetContent.innerHTML).then(() => {
                 alert("內容已成功儲存至雲端！");
-                buildBreadcrumbs(pageId); // 儲存後重刷麵包屑
+                buildBreadcrumbs(pageId); 
             }).catch(err => alert("儲存失敗: " + err.message));
             setupAccordion();
         });
