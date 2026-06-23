@@ -50,6 +50,7 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content: flex-end;">
                 <button id="backupBtn" class="btn btn-backup">📥 備份</button>
                 <button id="restoreBtn" class="btn btn-restore">📤 還原</button>
+                <a href="admin-dashboard.html" id="dashboardBtn" class="btn btn-edit" style="background:#34495e; display:none; text-decoration:none;">🗄️ 進入後台</a>
                 <input type="file" id="restoreFile" accept=".json" style="display:none;">
                 <button id="addCategoryBtn" class="btn btn-add">📁 新增分類</button>
                 <button id="editBtn" class="btn btn-edit">⚙️ 管理目錄</button>
@@ -116,6 +117,7 @@
                 statusMessage.style.color = "#27ae60";
                 loginBtn.innerText = "登出";
                 editBtn.style.display = "inline-block";
+                document.getElementById('dashboardBtn').style.display = "inline-block";
                 backupBtn.style.display = "inline-block";
                 restoreBtn.style.display = "inline-block";
             } else {
@@ -125,6 +127,7 @@
                 loginBtn.innerText = "Admin 登入";
                 disableEditing();
                 editBtn.style.display = "none";
+                document.getElementById('dashboardBtn').style.display = "none";
                 backupBtn.style.display = "none";
                 restoreBtn.style.display = "none";
                 if(user) auth.signOut();
@@ -138,14 +141,43 @@
         });
 
         // Backup & Restore
-        backupBtn.addEventListener('click', () => {
-            db.ref('/').once('value').then(snap => {
-                const blob = new Blob([JSON.stringify(snap.val(), null, 2)], {type: 'application/json'});
+        backupBtn.addEventListener('click', async () => {
+            try {
+                // 將原來嘅按鈕文字改為提示中
+                const originalText = backupBtn.innerText;
+                backupBtn.innerText = "⏳ 備份打包中...";
+                
+                // 逐個合法嘅節點去讀取資料，避開根目錄 (Root) 嘅權限封鎖
+                const [pagesSnap, titlesSnap, mainSnap, indexSnap, parentsSnap] = await Promise.all([
+                    db.ref('pages').once('value'),
+                    db.ref('page_titles').once('value'),
+                    db.ref('main_title').once('value'),
+                    db.ref('index_content').once('value'),
+                    db.ref('page_parents').once('value')
+                ]);
+
+                // 重新組裝成一個完整嘅 JSON 物件
+                const backupData = {
+                    pages: pagesSnap.val(),
+                    page_titles: titlesSnap.val(),
+                    main_title: mainSnap.val(),
+                    index_content: indexSnap.val(),
+                    page_parents: parentsSnap.val()
+                };
+
+                // 觸發下載
+                const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: 'application/json'});
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `cabinet_backup_${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
-            });
+                
+                // 還原按鈕文字
+                backupBtn.innerText = originalText;
+            } catch (err) {
+                alert("備份失敗（權限或連線問題）：" + err.message);
+                backupBtn.innerText = "📥 備份";
+            }
         });
         restoreBtn.addEventListener('click', () => { if(confirm("⚠️ 匯入將完全覆蓋目前雲端資料！確定繼續？")) restoreFile.click(); });
         restoreFile.addEventListener('change', (e) => {
@@ -213,7 +245,7 @@
                         } return tempId;
                     }
                     const finalId = await getValidId(); if (!finalId) return;
-
+                    db.ref('page_parents/' + finalId).set('index');
                     const newItem = document.createElement('div'); newItem.className = 'link-item';
                     newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="page.html?id=${finalId}">點此修改新文章標題</a> <button class="btn-delete del-link">X</button>`;
                     list.appendChild(newItem);
