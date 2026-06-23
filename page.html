@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Knowledge Cabinet - 內容頁</title>
-    
+    <title>文章內容 - Knowledge Cabinet</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
     <style>
         body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f6; padding: 20px; line-height: 1.6; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
@@ -16,6 +14,11 @@
         .back-btn { text-decoration: none; color: #3498db; font-weight: bold; }
         .btn-copy-link { background: #1abc9c; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
         .btn-copy-link:hover { background: #16a085; }
+        
+        /* 頁面總標題樣式 */
+        .title-container { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; padding-bottom: 15px; }
+        #pageMainTitle { color: #2c3e50; display: inline-block; padding: 5px 15px; border-radius: 8px; margin: 0; transition: 0.3s; font-size: 28px; }
+        .editing #pageMainTitle { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; min-width: 200px; }
 
         .sys-controls { margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .btn { padding: 8px 16px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; font-size: 14px; }
@@ -46,7 +49,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="mainContainer">
         <div class="nav-bar">
             <a href="index.html" class="back-btn">← 返回目錄</a>
             <button id="copyShareBtn" class="btn-copy-link">🔗 複製此頁連結</button>
@@ -55,7 +58,7 @@
         <div class="sys-controls">
             <div>
                 <button id="loginBtn" class="btn btn-login">Admin 登入</button>
-                <span id="statusMessage" style="margin-left:10px;">系統連線中...</span>
+                <span id="statusMessage" style="margin-left:10px;">閱讀者 (唯讀)</span>
             </div>
             <div>
                 <button id="addBoxBtn" class="btn btn-add">➕ 新增區塊</button>
@@ -64,11 +67,15 @@
                 <button id="saveBtn" class="btn btn-save">💾 儲存</button>
             </div>
         </div>
+        
+        <div class="title-container">
+            <h1 id="pageMainTitle" style="display:none;"></h1>
+        </div>
+
         <div id="cabinetContent">載入中...</div>
     </div>
 
     <script>
-        // 1. Firebase 初始化設定
         const firebaseConfig = {
             apiKey: "AIzaSyDBNEWLMjXK91OWNz_dMNNsz1rS-XYkYoE",
             authDomain: "knowledge-cabinet.firebaseapp.com",
@@ -92,9 +99,11 @@
         const addBoxBtn = document.getElementById('addBoxBtn');
         const copyShareBtn = document.getElementById('copyShareBtn');
         const cabinetContent = document.getElementById('cabinetContent');
+        const pageMainTitle = document.getElementById('pageMainTitle');
+        const mainContainer = document.getElementById('mainContainer');
+        
         let isAdmin = false; let isEditing = false;
 
-        // 2. 監聽登入狀態
         auth.onAuthStateChanged(user => {
             if (user && user.email === ADMIN_EMAIL) {
                 isAdmin = true;
@@ -118,7 +127,21 @@
             else { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => alert(err.message)); }
         });
 
-        // 3. 實時載入內容
+        // 載入文章總標題
+        db.ref('page_titles/' + pageId).on('value', snap => {
+            if (!isEditing) {
+                if(snap.exists() && snap.val().trim() !== "") {
+                    pageMainTitle.innerHTML = snap.val();
+                    pageMainTitle.style.display = "inline-block";
+                    document.title = pageMainTitle.innerText.trim() + " - Knowledge Cabinet";
+                } else {
+                    pageMainTitle.style.display = "none";
+                    document.title = "文章內容 - Knowledge Cabinet";
+                }
+            }
+        });
+
+        // 載入文章區塊內容
         db.ref('pages/' + pageId).on('value', snap => {
             if (!isEditing) {
                 if(snap.exists()) {
@@ -136,10 +159,7 @@
                 const originalText = copyShareBtn.innerText;
                 copyShareBtn.innerText = "✅ 連結已複製！";
                 copyShareBtn.style.background = "#27ae60";
-                setTimeout(() => {
-                    copyShareBtn.innerText = originalText;
-                    copyShareBtn.style.background = "#1abc9c";
-                }, 3000);
+                setTimeout(() => { copyShareBtn.innerText = originalText; copyShareBtn.style.background = "#1abc9c"; }, 3000);
             }).catch(() => alert("複製失敗，請手動複製網址列。"));
         });
 
@@ -156,35 +176,25 @@
 
         function setupDragAndDrop() {
             cabinetContent.addEventListener('dragover', e => {
-                e.preventDefault();
-                const draggingBox = document.querySelector('.dragging');
+                e.preventDefault(); const draggingBox = document.querySelector('.dragging');
                 if(!draggingBox) return;
                 const afterElement = getDragAfterElement(cabinetContent, e.clientY);
-                if (afterElement == null) { cabinetContent.appendChild(draggingBox); } 
-                else { cabinetContent.insertBefore(draggingBox, afterElement); }
+                if (afterElement == null) cabinetContent.appendChild(draggingBox); else cabinetContent.insertBefore(draggingBox, afterElement);
             });
         }
 
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.querySelectorAll('.box:not(.dragging)')];
             return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else { return closest; }
+                const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest;
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
         function addToolbarToBox(box) {
             if (!box.querySelector('.box-toolbar')) {
-                const toolbar = document.createElement('div');
-                toolbar.className = 'box-toolbar';
-                toolbar.setAttribute('contenteditable', 'false');
-                
-                const dragHandle = document.createElement('span');
-                dragHandle.className = 'drag-handle';
-                dragHandle.innerHTML = '☰ 移動';
+                const toolbar = document.createElement('div'); toolbar.className = 'box-toolbar'; toolbar.setAttribute('contenteditable', 'false');
+                const dragHandle = document.createElement('span'); dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
                 
                 dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
                 dragHandle.addEventListener('mouseup', () => box.setAttribute('draggable', 'false'));
@@ -193,72 +203,62 @@
                 box.addEventListener('dragstart', () => box.classList.add('dragging'));
                 box.addEventListener('dragend', () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); });
 
-                const delBtn = document.createElement('button');
-                delBtn.className = 'btn-delete-box';
-                delBtn.innerHTML = '🗑️ 刪除';
+                const delBtn = document.createElement('button'); delBtn.className = 'btn-delete-box'; delBtn.innerHTML = '🗑️ 刪除';
                 delBtn.onclick = function() { if(confirm('確定要刪除？')) box.remove(); };
-                
-                toolbar.appendChild(dragHandle);
-                toolbar.appendChild(delBtn);
-                box.insertBefore(toolbar, box.firstChild);
+                toolbar.appendChild(dragHandle); toolbar.appendChild(delBtn); box.insertBefore(toolbar, box.firstChild);
             }
         }
 
         editBtn.addEventListener('click', () => {
             isEditing = true;
-            editBtn.style.display = "none";
-            saveBtn.style.display = "inline-block";
-            createLinkBtn.style.display = "inline-block";
-            addBoxBtn.style.display = "inline-block";
-            cabinetContent.classList.add('editing');
+            editBtn.style.display = "none"; saveBtn.style.display = "inline-block";
+            createLinkBtn.style.display = "inline-block"; addBoxBtn.style.display = "inline-block";
+            mainContainer.classList.add('editing');
+
+            // 顯示並允許編輯總標題
+            pageMainTitle.style.display = "inline-block";
+            if (pageMainTitle.innerText.trim() === "") pageMainTitle.innerHTML = "請輸入文章總標題";
+            pageMainTitle.setAttribute('contenteditable', 'true');
 
             document.querySelectorAll('.box-header, .box-content').forEach(el => {
                 el.setAttribute('contenteditable', 'true');
-                if(el.classList.contains('box-header')) { el.style.display = "block"; }
+                if(el.classList.contains('box-header')) el.style.display = "block";
             });
-
             document.querySelectorAll('.box').forEach(box => addToolbarToBox(box));
         });
 
         addBoxBtn.addEventListener('click', () => {
-            const newBox = document.createElement('div');
-            newBox.className = 'box active';
+            const newBox = document.createElement('div'); newBox.className = 'box active';
             newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
-            cabinetContent.appendChild(newBox);
-            addToolbarToBox(newBox);
+            cabinetContent.appendChild(newBox); addToolbarToBox(newBox);
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         });
 
-        // 4. 建立子頁面 (非同步 Auto Detect)
         createLinkBtn.addEventListener('click', async () => {
             const selection = window.getSelection();
             if (!selection.rangeCount || selection.toString().trim() === '') return alert('請先反白選取文字！');
-            
-            // 儲存目前嘅反白範圍，避免 prompt 彈出後反白消失
             const range = selection.getRangeAt(0);
             
             async function getValidId() {
                 let customId = prompt("請設定專屬 ID (例如：ai-part2)。\n留空將自動生成隨機 ID：", "");
                 if (customId === null) return null;
-                
                 let tempId = customId.trim() !== "" ? customId.trim().toLowerCase().replace(/\s+/g, '-') : 'sub_' + Math.random().toString(36).substr(2, 6);
                 
                 const snap = await db.ref('pages/' + tempId).once('value');
                 if (snap.exists()) {
-                    if (confirm(`⚠️ 警告：系統偵測到「${tempId}」已存在！\n\n按【確定】：將文字連結去該舊頁面。\n按【取消】：重新設定新 ID。`)) {
-                        return tempId;
-                    }
+                    if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】將文字連結去該舊頁面。\n按【取消】重新設定。`)) return tempId;
                     return await getValidId();
                 }
                 return tempId;
             }
 
-            const finalId = await getValidId();
-            if (!finalId) return;
+            const finalId = await getValidId(); if (!finalId) return;
 
-            // 回復反白範圍並建立連結
-            selection.removeAllRanges();
-            selection.addRange(range);
+            // 儲存反白嘅文字，作為新子頁面嘅預設「總標題」
+            const selectedText = selection.toString().trim();
+            if(selectedText !== "") db.ref('page_titles/' + finalId).set(selectedText);
+
+            selection.removeAllRanges(); selection.addRange(range);
             document.execCommand('createLink', false, `page.html?id=${finalId}`);
             alert(`成功！連結已指向 ID: ${finalId}`);
         });
@@ -267,13 +267,15 @@
             disableEditing();
             document.querySelectorAll('.box').forEach(box => {
                 const header = box.querySelector('.box-header');
-                if(header.innerText.trim() === "") {
-                    header.style.display = "none";
-                    box.classList.add('active');
-                } else { header.style.display = "block"; }
+                if(header.innerText.trim() === "") { header.style.display = "none"; box.classList.add('active'); } 
+                else { header.style.display = "block"; }
             });
             
-            // 寫入 Firebase
+            // 儲存總標題
+            const titleText = pageMainTitle.innerText.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
+            db.ref('page_titles/' + pageId).set(titleText);
+
+            // 儲存內容區塊
             db.ref('pages/' + pageId).set(cabinetContent.innerHTML).then(() => {
                 alert("內容已成功儲存至雲端！");
             }).catch(err => alert("儲存失敗: " + err.message));
@@ -282,13 +284,16 @@
         });
 
         function disableEditing() {
-            isEditing = false;
-            cabinetContent.classList.remove('editing');
-            createLinkBtn.style.display = "none";
-            addBoxBtn.style.display = "none";
+            isEditing = false; mainContainer.classList.remove('editing');
+            createLinkBtn.style.display = "none"; addBoxBtn.style.display = "none";
             document.querySelectorAll('.box-toolbar').forEach(t => t.remove());
-            document.querySelectorAll('.box-header, .box-content').forEach(el => el.setAttribute('contenteditable', 'false'));
             
+            pageMainTitle.setAttribute('contenteditable', 'false');
+            if (pageMainTitle.innerText.trim() === "" || pageMainTitle.innerText.trim() === "請輸入文章總標題") {
+                pageMainTitle.style.display = "none";
+            }
+
+            document.querySelectorAll('.box-header, .box-content').forEach(el => el.setAttribute('contenteditable', 'false'));
             if (isAdmin) editBtn.style.display = "inline-block";
             saveBtn.style.display = "none";
         }
