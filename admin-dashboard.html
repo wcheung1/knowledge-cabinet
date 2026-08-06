@@ -19,6 +19,10 @@
         th { background-color: #bdc3c7; font-weight: bold; }
         tr:hover { background-color: #d4eaf2; }
         
+        .zone-tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .zone-public { background: #d6eaf8; color: #2471a3; }
+        .zone-private { background: #fadbd8; color: #c0392b; }
+        
         .btn-small { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-right: 5px; }
         .btn-open { background: #3498db; color: white; text-decoration: none; }
         .btn-copy { background: #1abc9c; color: white; }
@@ -37,6 +41,7 @@
             <thead>
                 <tr>
                     <th>Page ID</th>
+                    <th>區域</th>
                     <th>頁面總標題</th>
                     <th>父層級 (來源)</th>
                     <th>操作</th>
@@ -47,6 +52,60 @@
     </div>
 
     <script>
+        /* =========================================================
+           💡 避雷策略 3：借殼上市 (設定 Firebase)
+           請將下面嘅 config 替換為你嘅 Firebase 設定
+           ---------------------------------------------------------
+           ⚠ 下面個 apiKey 係公開嘅，冇問題 —— Firebase 個 apiKey 淨係識別
+           邊個 project，唔係密碼。真正擋人嘅係 Realtime Database 嘅安全規則。
+           截至 2026-08 已部署嘅規則（同 repo 入面 database.rules.json 一樣；
+           private_* 嗰四條係 2026-08 為「私人區域」功能加嘅）：
+             {
+          "rules": {
+            "pages": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_titles": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "main_title": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "index_content": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_parents": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_pages": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_titles": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_parents": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_index_content": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            }
+          }
+        }
+           即係：淨係本人('w.cheung815@gmail.com')先讀寫得到自己admin下面嗰份資料；root 同其他路徑冇寫
+           .read/.write，預設一律拒絕。未登入嗰陣 auth 係 null，條式永遠唔成立。
+           private_* 路徑連 .read 都鎖埋，所以「私人區域」嘅文章就算有 link 都開唔到。
+           ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
+           記得順手改返呢度同 database.rules.json，唔好等佢過時。
+        ========================================================= */
         const firebaseConfig = {
             apiKey: "AIzaSyDBNEWLMjXK91OWNz_dMNNsz1rS-XYkYoE",
             authDomain: "knowledge-cabinet.firebaseapp.com",
@@ -66,52 +125,72 @@
             }
         });
 
+        function pageUrl(id, zone) {
+            return 'page.html?id=' + id + (zone === 'private' ? '&zone=private' : '');
+        }
+
         function loadDashboardData() {
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('pagesTable').style.display = 'table';
             const tbody = document.getElementById('tableBody');
 
-            // 同時讀取 pages, titles, 同 parents
+            // 同時讀取公開區同私人區嘅 pages / titles / parents
             Promise.all([
                 db.ref('pages').once('value'),
                 db.ref('page_titles').once('value'),
-                db.ref('page_parents').once('value')
+                db.ref('page_parents').once('value'),
+                db.ref('private_pages').once('value'),
+                db.ref('private_page_titles').once('value'),
+                db.ref('private_page_parents').once('value')
             ]).then(snapshots => {
-                const pages = snapshots[0].val() || {};
-                const titles = snapshots[1].val() || {};
-                const parents = snapshots[2].val() || {};
+                const zones = [
+                    { zone: 'public',  pages: snapshots[0].val() || {}, titles: snapshots[1].val() || {}, parents: snapshots[2].val() || {} },
+                    { zone: 'private', pages: snapshots[3].val() || {}, titles: snapshots[4].val() || {}, parents: snapshots[5].val() || {} }
+                ];
                 
                 tbody.innerHTML = '';
-                for (let id in pages) {
-                    const title = titles[id] || '<span style="color:#7f8c8d;font-style:italic;">(未設定標題)</span>';
-                    const parent = parents[id] === 'index' ? '總目錄' : (parents[id] || '無 / 孤立');
-                    
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><strong>${id}</strong></td>
-                        <td>${title}</td>
-                        <td><span style="background:#bdc3c7; padding:2px 6px; border-radius:4px; font-size:12px;">${parent}</span></td>
-                        <td>
-                            <a href="page.html?id=${id}" target="_blank" class="btn-small btn-open">👁️ 開啟</a>
-                            <button class="btn-small btn-copy" onclick="copyLink('${id}')">🔗 複製</button>
-                            <button class="btn-small btn-del" onclick="deletePage('${id}')">🗑️ 刪除</button>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-                }
+                zones.forEach(z => {
+                    for (let id in z.pages) {
+                        const title = z.titles[id] || '<span style="color:#7f8c8d;font-style:italic;">(未設定標題)</span>';
+                        const parent = z.parents[id] === 'index' ? '總目錄' : (z.parents[id] || '無 / 孤立');
+                        const zoneTag = z.zone === 'private'
+                            ? '<span class="zone-tag zone-private">🔒 私人</span>'
+                            : '<span class="zone-tag zone-public">🌐 公開</span>';
+                        
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${id}</strong></td>
+                            <td>${zoneTag}</td>
+                            <td>${title}</td>
+                            <td><span style="background:#bdc3c7; padding:2px 6px; border-radius:4px; font-size:12px;">${parent}</span></td>
+                            <td>
+                                <a href="${pageUrl(id, z.zone)}" target="_blank" class="btn-small btn-open">👁️ 開啟</a>
+                                <button class="btn-small btn-copy" onclick="copyLink('${id}', '${z.zone}')">🔗 複製</button>
+                                <button class="btn-small btn-del" onclick="deletePage('${id}', '${z.zone}')">🗑️ 刪除</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    }
+                });
+            }).catch(err => {
+                document.getElementById('loadingMsg').style.display = 'block';
+                document.getElementById('loadingMsg').innerText = "載入失敗：" + err.message + "（如果係 permission denied，請確認 database rules 已加入 private_* 路徑）";
             });
         }
 
-        function copyLink(id) {
-            const url = window.location.origin + window.location.pathname.replace('admin-dashboard.html', '') + 'page.html?id=' + id;
-            navigator.clipboard.writeText(url).then(() => alert('已複製連結！'));
+        function copyLink(id, zone) {
+            const url = window.location.origin + window.location.pathname.replace('admin-dashboard.html', '') + pageUrl(id, zone);
+            navigator.clipboard.writeText(url).then(() => {
+                alert(zone === 'private' ? '已複製連結！（🔒 私人頁：其他人開唔到，只供自己用）' : '已複製連結！');
+            });
         }
 
-        function deletePage(id) {
-            if(confirm(`⚠️ 極度危險：確定要徹底刪除 Page ID [${id}] 嗎？\n刪除後無法復原！`)) {
-                db.ref('pages/' + id).remove();
-                db.ref('page_titles/' + id).remove();
-                db.ref('page_parents/' + id).remove();
+        function deletePage(id, zone) {
+            const prefix = zone === 'private' ? 'private_' : '';
+            if(confirm(`⚠️ 極度危險：確定要徹底刪除 ${zone === 'private' ? '【私人區】' : '【公開區】'} Page ID [${id}] 嗎？\n刪除後無法復原！`)) {
+                db.ref(prefix + 'pages/' + id).remove();
+                db.ref(prefix + 'page_titles/' + id).remove();
+                db.ref(prefix + 'page_parents/' + id).remove();
                 alert('頁面已刪除！');
                 loadDashboardData(); // 重新整理表格
             }

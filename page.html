@@ -19,6 +19,7 @@
         .breadcrumbs span { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; font-weight: bold; color: #2c3e50; }
 
         .nav-bar { margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
+        .private-badge { background: #fdf0ef; color: #c0392b; font-weight: bold; padding: 6px 10px; border-radius: 6px; font-size: 14px; margin-right: auto; }
         .btn-copy-link { background: #1abc9c; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }
         .btn-copy-link:hover { background: #16a085; }
 
@@ -26,11 +27,8 @@
         #pageMainTitle { color: #2c3e50; display: inline-block; padding: 5px 15px; border-radius: 8px; margin: 0; transition: 0.3s; font-size: 28px; }
         .editing #pageMainTitle { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; min-width: 200px; }
 
-        /* UI/UX 改善: 懸浮操作列 */
-        .sys-controls { position: sticky; top: 0; background: rgba(255, 255, 255, 0.95); z-index: 100; padding: 15px 0; margin-top: -10px; margin-bottom: 30px; border-bottom: 2px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-radius: 8px 8px 0 0; }
-        
-        .btn { padding: 8px 16px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; font-size: 14px; transition: 0.2s; }
-        .btn:hover { opacity: 0.9; }
+        .sys-controls { margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .btn { padding: 8px 16px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; font-size: 14px; }
         .btn-login { background: #4285F4; color: white; }
         .btn-edit { background: #f39c12; color: white; display: none; }
         .btn-save { background: #2ecc71; color: white; display: none; }
@@ -44,50 +42,33 @@
         .box-header::after { content: '▼'; position: absolute; right: 20px; top: 18px; font-size: 12px; color: #95a5a6; transition: 0.3s; }
         .box.active .box-header::after { transform: rotate(180deg); }
         .box-content { display: none; padding: 20px; border-top: 1px solid #ecf0f1; }
-        
-        /* 動態雙擊編輯狀態 */
-        .editing-active { border: 2px dashed #3498db !important; background-color: #f9fcff !important; outline: none; cursor: text !important; }
-        .editing .box-header { cursor: pointer; } /* 保持編輯模式下標題可點擊展開/縮埋 */
-        .box.active .box-content, .box-content.editing-active { display: block; }
-        
+        .box.active .box-content { display: block; }
+        .editing .box-header, .editing .box-content { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; }
+        .editing .box-header::after { display: none; }
+        .editing .box-content { display: block; }
         .box-content a { color: #e74c3c; font-weight: bold; text-decoration: underline; cursor: pointer; background: #fdf2f1; padding: 2px 6px; border-radius: 4px; }
 
         .box-toolbar { background: #e8f4f8; padding: 6px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; }
         .left-group { display: flex; align-items: center; gap: 10px; }
-        .right-group { display: flex; align-items: center; gap: 8px; }
         .drag-handle { cursor: grab; font-size: 16px; color: #34495e; font-weight: bold; user-select: none; }
         .drag-handle:active { cursor: grabbing; }
         
+        /* 預設狀態切換按鈕樣式 */
         .btn-state { background: #3498db; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-state.collapsed { background: #95a5a6; } 
+        .btn-state.collapsed { background: #95a5a6; } /* 縮埋狀態變灰色 */
         
-        .btn-delete-box { background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-delete-box { background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; }
         .btn-delete-box:hover { background: #c0392b; }
-
-        /* UI/UX 改善: 浮動文字格式化工具列 */
-        #formatToolbar { display: none; position: absolute; background: #2c3e50; color: white; padding: 6px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 15px rgba(0,0,0,0.2); flex-direction: row; gap: 5px; }
-        #formatToolbar button { background: none; border: none; color: white; cursor: pointer; padding: 6px 10px; border-radius: 4px; font-weight: bold; font-size: 14px; transition: 0.2s; }
-        #formatToolbar button:hover { background: #34495e; }
     </style>
 </head>
 <body>
     <div class="container" id="mainContainer">
         
-        <!-- 浮動文字工具列 -->
-        <div id="formatToolbar">
-            <button onmousedown="event.preventDefault(); document.execCommand('bold', false, null)" title="粗體"><b>B</b></button>
-            <button onmousedown="event.preventDefault(); document.execCommand('italic', false, null)" title="斜體"><i>I</i></button>
-            <button onmousedown="event.preventDefault(); document.execCommand('underline', false, null)" title="底線"><u>U</u></button>
-            <button onmousedown="event.preventDefault(); document.execCommand('hiliteColor', false, 'yellow')" title="標記底色">🖍️</button>
-            <button onmousedown="event.preventDefault(); document.execCommand('formatBlock', false, 'H3')" title="轉換為標題">H3</button>
-            <button onmousedown="event.preventDefault(); document.execCommand('removeFormat', false, null)" title="清除格式">❌</button>
-        </div>
-
         <div class="breadcrumbs" id="breadcrumbsContainer">
             載入導航路徑中...
         </div>
 
-        <div class="nav-bar">
+        <div class="nav-bar" id="navBar">
             <button id="copyShareBtn" class="btn-copy-link">🔗 複製此頁連結</button>
         </div>
 
@@ -96,7 +77,7 @@
                 <button id="loginBtn" class="btn btn-login">Admin 登入</button>
                 <span id="statusMessage" style="margin-left:10px;">閱讀者 (唯讀)</span>
             </div>
-            <div style="display:flex; gap:8px;">
+            <div>
                 <button id="addBoxBtn" class="btn btn-add">➕ 新增區塊</button>
                 <button id="createLinkBtn" class="btn btn-link" title="反白文字後點擊">🔗 變為子頁面</button>
                 <button id="editBtn" class="btn btn-edit">✏️ 編輯內容</button>
@@ -109,12 +90,27 @@
         </div>
 
         <div id="cabinetContent">載入中...</div>
-        
-        <!-- 底部新增區塊按鈕 -->
-        <button id="addBoxBtnBottom" class="btn btn-add" style="display:none; width:100%; margin-top: 20px; font-size: 16px; padding: 12px;">➕ 於底部新增區塊</button>
     </div>
 
     <script>
+        /* =========================================================
+           💡 避雷策略 3：借殼上市 (設定 Firebase)
+           請將下面嘅 config 替換為你嘅 Firebase 設定
+           ---------------------------------------------------------
+           ⚠ 下面個 apiKey 係公開嘅，冇問題 —— Firebase 個 apiKey 淨係識別
+           邊個 project，唔係密碼。真正擋人嘅係 Realtime Database 嘅安全規則。
+           完整規則內容請睇 index.html 同一位置嘅註解，或者 repo 入面嘅
+           database.rules.json（兩邊要保持一致）。重點：
+           - pages / page_titles / page_parents / main_title：.read 公開，
+             .write 淨係本人 ('w.cheung815@gmail.com')。
+           - index_content 同所有 private_* 路徑（private_pages、
+             private_page_titles、private_page_parents、private_index_content）：
+             .read 同 .write 都淨係本人 —— 所以私人區文章有 link 都開唔到。
+           - root 同其他路徑冇寫 .read/.write，預設一律拒絕。
+             未登入嗰陣 auth 係 null，條式永遠唔成立。
+           ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
+           記得順手改返呢度、index.html 同 database.rules.json，唔好等佢過時。
+        ========================================================= */
         const firebaseConfig = {
             apiKey: "AIzaSyDBNEWLMjXK91OWNz_dMNNsz1rS-XYkYoE",
             authDomain: "knowledge-cabinet.firebaseapp.com",
@@ -130,21 +126,79 @@
         let pageId = urlParams.get('id');
         if(!pageId) { window.location.href = 'index.html'; }
 
+        // ===== 私人區支援 =====
+        // URL 帶 zone=private 就讀寫 private_* 節點。個 flag 本身唔係秘密：
+        // 真正擋人嘅係 database rules —— 未以 Admin 登入，private_* 一律 PERMISSION_DENIED。
+        const isPrivate = urlParams.get('zone') === 'private';
+        const P_PAGES   = isPrivate ? 'private_pages'        : 'pages';
+        const P_TITLES  = isPrivate ? 'private_page_titles'  : 'page_titles';
+        const P_PARENTS = isPrivate ? 'private_page_parents' : 'page_parents';
+        const pageLink  = id => `page.html?id=${id}` + (isPrivate ? '&zone=private' : '');
+
         const loginBtn = document.getElementById('loginBtn');
         const statusMessage = document.getElementById('statusMessage');
         const editBtn = document.getElementById('editBtn');
         const saveBtn = document.getElementById('saveBtn');
         const createLinkBtn = document.getElementById('createLinkBtn');
         const addBoxBtn = document.getElementById('addBoxBtn');
-        const addBoxBtnBottom = document.getElementById('addBoxBtnBottom');
         const copyShareBtn = document.getElementById('copyShareBtn');
         const cabinetContent = document.getElementById('cabinetContent');
         const pageMainTitle = document.getElementById('pageMainTitle');
         const mainContainer = document.getElementById('mainContainer');
         const breadcrumbsContainer = document.getElementById('breadcrumbsContainer');
-        const formatToolbar = document.getElementById('formatToolbar');
         
         let isAdmin = false; let isEditing = false;
+
+        // 私人頁面加個標記，等自己一眼認得
+        if (isPrivate) {
+            const badge = document.createElement('span');
+            badge.className = 'private-badge';
+            badge.innerText = '🔒 私人頁面';
+            document.getElementById('navBar').prepend(badge);
+        }
+
+        function showLockedScreen() {
+            pageMainTitle.style.display = "none";
+            document.title = "🔒 私人頁面 - Knowledge Cabinet";
+            breadcrumbsContainer.innerHTML = `<a href="index.html">← 返回總目錄</a>`;
+            cabinetContent.innerHTML = `<div style='text-align:center; padding: 40px; color:#7f8c8d; background:#f9f9f9; border-radius:10px;'>
+                <h2>🔒 呢頁屬於私人區域</h2>
+                <p>內容由 Firebase 安全規則保護，只有管理員登入後先可以查看。</p>
+            </div>`;
+        }
+
+        // 將載入內容包做 Function：因為私人頁一定要等 auth 狀態確定咗先好去讀，
+        // 否則個 listener 會喺未攞到權限嗰陣俾 server 取消咗，之後就算登入咗都唔會自己翻生。
+        function loadPage() {
+            db.ref(P_TITLES + '/' + pageId).off();
+            db.ref(P_PAGES + '/' + pageId).off();
+
+            if (isPrivate && !isAdmin) { showLockedScreen(); return; }
+
+            buildBreadcrumbs(pageId);
+
+            db.ref(P_TITLES + '/' + pageId).on('value', snap => {
+                if (!isEditing) {
+                    if(snap.exists() && snap.val().trim() !== "") {
+                        pageMainTitle.innerHTML = snap.val();
+                        pageMainTitle.style.display = "inline-block";
+                        document.title = pageMainTitle.innerText.trim() + " - Knowledge Cabinet";
+                        buildBreadcrumbs(pageId); 
+                    } else {
+                        pageMainTitle.style.display = "none";
+                        document.title = "文章內容 - Knowledge Cabinet";
+                    }
+                }
+            }, err => { if(err.code === 'PERMISSION_DENIED') showLockedScreen(); });
+
+            db.ref(P_PAGES + '/' + pageId).on('value', snap => {
+                if (!isEditing) {
+                    if(snap.exists()) cabinetContent.innerHTML = snap.val();
+                    else cabinetContent.innerHTML = `<div class="box active"><div class="box-header">新主題</div><div class="box-content"><p>請切換至 Admin 並編輯內容。</p></div></div>`;
+                    setupAccordion(); setupDragAndDrop();
+                }
+            }, err => { if(err.code === 'PERMISSION_DENIED') showLockedScreen(); });
+        }
 
         auth.onAuthStateChanged(user => {
             if (user && user.email === ADMIN_EMAIL) {
@@ -155,13 +209,14 @@
                 editBtn.style.display = "inline-block";
             } else {
                 isAdmin = false;
-                statusMessage.innerText = "閱讀者 (唯讀)";
-                statusMessage.style.color = "#7f8c8d";
+                statusMessage.innerText = isPrivate ? "訪客 (私人頁，請登入)" : "閱讀者 (唯讀)";
+                statusMessage.style.color = isPrivate ? "#e74c3c" : "#7f8c8d";
                 loginBtn.innerText = "Admin 登入";
                 disableEditing();
                 editBtn.style.display = "none";
                 if(user) auth.signOut();
             }
+            loadPage(); // 登入或登出都重新載入（觸發權限檢查）
         });
 
         loginBtn.addEventListener('click', () => {
@@ -175,58 +230,37 @@
             
             while(current && current !== 'index') {
                 pathChain.unshift(current);
-                const snap = await db.ref('page_parents/' + current).once('value');
+                const snap = await db.ref(P_PARENTS + '/' + current).once('value');
                 current = snap.val();
             }
             
-            const indexSnap = await db.ref('main_title').once('value');
-            const mainTitleText = indexSnap.exists() ? indexSnap.val() : "總目錄";
+            let mainTitleText = "總目錄";
+            try {
+                const indexSnap = await db.ref('main_title').once('value');
+                if (indexSnap.exists()) mainTitleText = indexSnap.val();
+            } catch(e) { /* main_title 讀唔到就用預設 */ }
             
             let html = `<a href="index.html" title="${mainTitleText}">${mainTitleText}</a>`;
             
             for (let i = 0; i < pathChain.length; i++) {
                 const id = pathChain[i];
-                const tSnap = await db.ref('page_titles/' + id).once('value');
+                const tSnap = await db.ref(P_TITLES + '/' + id).once('value');
                 const titleText = tSnap.exists() ? tSnap.val() : "未命名頁面";
                 
                 html += ` &nbsp;❯&nbsp; `;
                 if (i === pathChain.length - 1) {
                     html += `<span title="${titleText}">${titleText}</span>`;
                 } else {
-                    html += `<a href="page.html?id=${id}" title="${titleText}">${titleText}</a>`;
+                    html += `<a href="${pageLink(id)}" title="${titleText}">${titleText}</a>`;
                 }
             }
             breadcrumbsContainer.innerHTML = html;
         }
 
-        buildBreadcrumbs(pageId); 
-
-        db.ref('page_titles/' + pageId).on('value', snap => {
-            if (!isEditing) {
-                if(snap.exists() && snap.val().trim() !== "") {
-                    pageMainTitle.innerHTML = snap.val();
-                    pageMainTitle.style.display = "inline-block";
-                    document.title = pageMainTitle.innerText.trim() + " - Knowledge Cabinet";
-                    buildBreadcrumbs(pageId); 
-                } else {
-                    pageMainTitle.style.display = "none";
-                    document.title = "文章內容 - Knowledge Cabinet";
-                }
-            }
-        });
-
-        db.ref('pages/' + pageId).on('value', snap => {
-            if (!isEditing) {
-                if(snap.exists()) cabinetContent.innerHTML = snap.val();
-                else cabinetContent.innerHTML = `<div class="box active"><div class="box-header">新主題</div><div class="box-content"><p>請切換至 Admin 並編輯內容。</p></div></div>`;
-                setupAccordion(); setupDragAndDrop();
-            }
-        });
-
         copyShareBtn.addEventListener('click', () => {
             navigator.clipboard.writeText(window.location.href).then(() => {
                 const originalText = copyShareBtn.innerText;
-                copyShareBtn.innerText = "✅ 連結已複製！";
+                copyShareBtn.innerText = isPrivate ? "✅ 已複製（私人頁，訪客開唔到）" : "✅ 連結已複製！";
                 copyShareBtn.style.background = "#27ae60";
                 setTimeout(() => { copyShareBtn.innerText = originalText; copyShareBtn.style.background = "#1abc9c"; }, 3000);
             }).catch(() => alert("複製失敗，請手動複製網址列。"));
@@ -234,7 +268,6 @@
 
         function setupAccordion() {
             document.querySelectorAll('.box-header').forEach(header => {
-                // Remove any old event listeners by replacing the node
                 const newHeader = header.cloneNode(true);
                 header.parentNode.replaceChild(newHeader, header);
                 newHeader.addEventListener('click', function() {
@@ -261,45 +294,13 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
-        // --- 取出公用的「變為子頁面」邏輯 ---
-        async function createLinkLogic() {
-            const selection = window.getSelection();
-            if (!selection.rangeCount || selection.toString().trim() === '') return alert('請先反白選取文字！');
-            const range = selection.getRangeAt(0);
-            
-            let customId = prompt("請設定專屬 ID (例如：ai-part2)。\n留空將自動生成帶有 Prefix 嘅 ID：", "");
-            if (customId === null) return;
-            
-            let tempId = customId.trim() !== "" 
-                ? customId.trim().toLowerCase().replace(/\s+/g, '-') 
-                : pageId + '_' + Math.random().toString(36).substr(2, 6);
-            
-            const snap = await db.ref('pages/' + tempId).once('value');
-            if (snap.exists()) {
-                if (!confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面。\n按【取消】重新設定。`)) return;
-            }
-
-            db.ref('page_parents/' + tempId).set(pageId);
-
-            const selectedText = selection.toString().trim();
-            if(selectedText !== "") db.ref('page_titles/' + tempId).set(selectedText);
-
-            selection.removeAllRanges(); selection.addRange(range);
-            document.execCommand('createLink', false, `page.html?id=${tempId}`);
-            alert(`成功！連結已指向 ID: ${tempId}`);
-            saveData(true); // 建立連結後自動背景儲存
-        }
-
-        // 綁定頂部控制列按鈕
-        createLinkBtn.addEventListener('click', createLinkLogic);
-
-        // --- 核心更新：將「儲存」與「子頁面」按鈕加入各區塊工具列 ---
+        // --- 工具列：狀態切換按鈕 ---
         function addToolbarToBox(box) {
             if (!box.querySelector('.box-toolbar')) {
                 const toolbar = document.createElement('div'); toolbar.className = 'box-toolbar'; toolbar.setAttribute('contenteditable', 'false');
                 
-                const leftGroup = document.createElement('div'); leftGroup.className = 'left-group';
-                const rightGroup = document.createElement('div'); rightGroup.className = 'right-group';
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'left-group';
 
                 const dragHandle = document.createElement('span'); dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
                 dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
@@ -308,6 +309,7 @@
 
                 const stateBtn = document.createElement('button');
                 stateBtn.className = 'btn-state';
+                
                 if (box.classList.contains('active')) {
                     stateBtn.innerHTML = '👀 訪客預設：展開';
                 } else {
@@ -325,66 +327,20 @@
                         stateBtn.innerHTML = '👀 訪客預設：展開';
                         stateBtn.classList.remove('collapsed');
                     }
-                    saveData(true); // 更改預設狀態自動儲存
                 };
 
                 box.addEventListener('dragstart', () => box.classList.add('dragging'));
                 box.addEventListener('dragend', () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); });
-                
-                // 區塊級專屬按鈕
-                const boxLinkBtn = document.createElement('button');
-                boxLinkBtn.className = 'btn-link'; boxLinkBtn.innerHTML = '🔗 變為子頁面';
-                boxLinkBtn.style.display = 'inline-block'; boxLinkBtn.style.padding = '4px 10px'; boxLinkBtn.style.fontSize = '12px';
-                boxLinkBtn.onclick = createLinkLogic;
-
-                const boxSaveBtn = document.createElement('button');
-                boxSaveBtn.className = 'btn-save'; boxSaveBtn.innerHTML = '💾 儲存';
-                boxSaveBtn.style.display = 'inline-block'; boxSaveBtn.style.padding = '4px 10px'; boxSaveBtn.style.fontSize = '12px';
-                boxSaveBtn.onclick = () => saveData(false);
 
                 const delBtn = document.createElement('button'); delBtn.className = 'btn-delete-box'; delBtn.innerHTML = '🗑️ 刪除';
-                delBtn.onclick = function() { if(confirm('確定要刪除此區塊？')) { box.remove(); saveData(true); } };
+                delBtn.onclick = function() { if(confirm('確定要刪除？')) box.remove(); };
                 
-                leftGroup.appendChild(dragHandle); leftGroup.appendChild(stateBtn);
-                rightGroup.appendChild(boxLinkBtn); rightGroup.appendChild(boxSaveBtn); rightGroup.appendChild(delBtn);
+                leftGroup.appendChild(dragHandle);
+                leftGroup.appendChild(stateBtn);
                 
                 toolbar.appendChild(leftGroup); 
-                toolbar.appendChild(rightGroup); 
+                toolbar.appendChild(delBtn); 
                 box.insertBefore(toolbar, box.firstChild);
-            }
-        }
-
-        // 綁定編輯相關事件 (雙擊編輯、單擊展開)
-        function attachEditEvents(box, header, content) {
-            if(header) {
-                header.ondblclick = function(e) { 
-                    e.stopPropagation(); 
-                    this.setAttribute('contenteditable', 'true'); 
-                    this.focus(); 
-                    this.classList.add('editing-active'); 
-                    box.classList.add('active'); // 確保編輯時展開
-                };
-                header.onclick = function(e) { 
-                    if (this.getAttribute('contenteditable') !== 'true') box.classList.toggle('active'); 
-                };
-                header.onblur = function() { 
-                    this.setAttribute('contenteditable', 'false'); 
-                    this.classList.remove('editing-active'); 
-                    saveData(true); // Auto-save on blur
-                };
-            }
-            if(content) {
-                content.ondblclick = function(e) { 
-                    e.stopPropagation(); 
-                    this.setAttribute('contenteditable', 'true'); 
-                    this.focus(); 
-                    this.classList.add('editing-active'); 
-                };
-                content.onblur = function() { 
-                    this.setAttribute('contenteditable', 'false'); 
-                    this.classList.remove('editing-active'); 
-                    saveData(true); // Auto-save on blur
-                };
             }
         }
 
@@ -392,112 +348,80 @@
             isEditing = true;
             editBtn.style.display = "none"; saveBtn.style.display = "inline-block";
             createLinkBtn.style.display = "inline-block"; addBoxBtn.style.display = "inline-block";
-            addBoxBtnBottom.style.display = "inline-block";
             mainContainer.classList.add('editing');
 
             pageMainTitle.style.display = "inline-block";
             if (pageMainTitle.innerText.trim() === "") pageMainTitle.innerHTML = "請輸入文章總標題";
             pageMainTitle.setAttribute('contenteditable', 'true');
 
-            document.querySelectorAll('.box').forEach(box => {
-                // 進入編輯模式時，自動縮埋所有區塊
-                box.classList.remove('active');
-                
-                addToolbarToBox(box);
-                const header = box.querySelector('.box-header');
-                const content = box.querySelector('.box-content');
-                if(header) header.style.display = "block";
-                
-                attachEditEvents(box, header, content);
+            document.querySelectorAll('.box-header, .box-content').forEach(el => {
+                el.setAttribute('contenteditable', 'true');
+                if(el.classList.contains('box-header')) el.style.display = "block";
             });
+            document.querySelectorAll('.box').forEach(box => addToolbarToBox(box));
         });
 
-        // 頂部與底部的新增區塊按鈕共用邏輯
-        function addNewBox() {
-            const newBox = document.createElement('div'); 
-            // 預設為縮埋 (無 active class)
-            newBox.className = 'box'; 
-            newBox.innerHTML = `<div class="box-header">新標題 (雙擊編輯)</div><div class="box-content"><p>請輸入內容... (雙擊編輯)</p></div>`;
-            cabinetContent.appendChild(newBox); 
-            addToolbarToBox(newBox);
-            
-            const header = newBox.querySelector('.box-header');
-            const content = newBox.querySelector('.box-content');
-            attachEditEvents(newBox, header, content);
-            
+        addBoxBtn.addEventListener('click', () => {
+            const newBox = document.createElement('div'); newBox.className = 'box active';
+            newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
+            cabinetContent.appendChild(newBox); addToolbarToBox(newBox);
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-            saveData(true);
-        }
-        addBoxBtn.addEventListener('click', addNewBox);
-        addBoxBtnBottom.addEventListener('click', addNewBox);
-
-        // --- 核心更新：安全儲存機制 (複製一份純淨版 HTML 去儲存) ---
-        async function saveData(silent = false) {
-            // 利用 clone 避免移除 toolbar 導致 UI 閃爍，保持編輯流暢
-            const cloneContainer = cabinetContent.cloneNode(true);
-            
-            cloneContainer.querySelectorAll('.box-toolbar').forEach(t => t.remove());
-            cloneContainer.querySelectorAll('.editing-active').forEach(el => {
-                el.setAttribute('contenteditable', 'false');
-                el.classList.remove('editing-active');
-            });
-            cloneContainer.querySelectorAll('.box').forEach(box => {
-                const header = box.querySelector('.box-header');
-                if(header && header.innerText.trim() === "") { 
-                    header.style.display = "none"; 
-                    box.classList.add('active'); 
-                } else if (header) { 
-                    header.style.display = "block"; 
-                }
-            });
-
-            const titleText = pageMainTitle.innerText.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
-            db.ref('page_titles/' + pageId).set(titleText);
-            
-            try {
-                await db.ref('pages/' + pageId).set(cloneContainer.innerHTML);
-                if(!silent) {
-                    alert("內容已成功儲存至雲端！");
-                    disableEditing();
-                    buildBreadcrumbs(pageId); 
-                }
-            } catch(err) {
-                if(!silent) alert("儲存失敗: " + err.message);
-            }
-        }
-
-        saveBtn.addEventListener('click', () => saveData(false));
-
-        // 快捷鍵 Ctrl+S 或 Cmd+S 儲存
-        document.addEventListener('keydown', e => {
-            if (isEditing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                e.preventDefault();
-                saveData(false);
-            }
         });
 
-        // 浮動文字格式化工具列邏輯
-        document.addEventListener('selectionchange', () => {
-            if (!isEditing) { formatToolbar.style.display = 'none'; return; }
+        createLinkBtn.addEventListener('click', async () => {
             const selection = window.getSelection();
-            if (selection.rangeCount > 0 && !selection.isCollapsed) {
-                const range = selection.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-                if(cabinetContent.contains(selection.anchorNode)) {
-                    formatToolbar.style.display = 'flex';
-                    formatToolbar.style.top = (window.scrollY + rect.top - 45) + 'px';
-                    formatToolbar.style.left = Math.max(10, (window.scrollX + rect.left)) + 'px';
+            if (!selection.rangeCount || selection.toString().trim() === '') return alert('請先反白選取文字！');
+            const range = selection.getRangeAt(0);
+            
+            async function getValidId() {
+                let customId = prompt((isPrivate ? "【🔒 私人區】" : "") + "請設定專屬 ID (例如：ai-part2)。\n留空將自動生成帶有 Prefix 嘅 ID：", "");
+                if (customId === null) return null;
+                
+                let tempId = customId.trim() !== "" 
+                    ? customId.trim().toLowerCase().replace(/\s+/g, '-') 
+                    : pageId + '_' + Math.random().toString(36).substr(2, 6);
+                
+                const snap = await db.ref(P_PAGES + '/' + tempId).once('value');
+                if (snap.exists()) {
+                    if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面。\n按【取消】重新設定。`)) return tempId;
+                    return await getValidId();
                 }
-            } else {
-                formatToolbar.style.display = 'none';
+                return tempId;
             }
+
+            const finalId = await getValidId(); if (!finalId) return;
+
+            // 私人頁嘅子頁面自動跟埋入私人區（private_page_parents），確保成條 chain 都受保護
+            db.ref(P_PARENTS + '/' + finalId).set(pageId);
+
+            const selectedText = selection.toString().trim();
+            if(selectedText !== "") db.ref(P_TITLES + '/' + finalId).set(selectedText);
+
+            selection.removeAllRanges(); selection.addRange(range);
+            document.execCommand('createLink', false, pageLink(finalId));
+            alert(`成功！連結已指向 ID: ${finalId}` + (isPrivate ? '（私人區）' : ''));
+        });
+
+        saveBtn.addEventListener('click', () => {
+            disableEditing();
+            document.querySelectorAll('.box').forEach(box => {
+                const header = box.querySelector('.box-header');
+                if(header.innerText.trim() === "") { header.style.display = "none"; box.classList.add('active'); } 
+                else { header.style.display = "block"; }
+            });
+            
+            const titleText = pageMainTitle.innerText.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
+            db.ref(P_TITLES + '/' + pageId).set(titleText);
+            db.ref(P_PAGES + '/' + pageId).set(cabinetContent.innerHTML).then(() => {
+                alert("內容已成功儲存至雲端！" + (isPrivate ? "（私人區）" : ""));
+                buildBreadcrumbs(pageId); 
+            }).catch(err => alert("儲存失敗: " + err.message));
+            setupAccordion();
         });
 
         function disableEditing() {
             isEditing = false; mainContainer.classList.remove('editing');
             createLinkBtn.style.display = "none"; addBoxBtn.style.display = "none";
-            addBoxBtnBottom.style.display = "none";
-            formatToolbar.style.display = 'none';
             document.querySelectorAll('.box-toolbar').forEach(t => t.remove());
             
             pageMainTitle.setAttribute('contenteditable', 'false');
@@ -505,17 +429,9 @@
                 pageMainTitle.style.display = "none";
             }
 
-            document.querySelectorAll('.box-header, .box-content').forEach(el => {
-                el.setAttribute('contenteditable', 'false');
-                el.classList.remove('editing-active');
-                el.ondblclick = null;
-                el.onclick = null;
-                el.onblur = null;
-            });
-            
+            document.querySelectorAll('.box-header, .box-content').forEach(el => el.setAttribute('contenteditable', 'false'));
             if (isAdmin) editBtn.style.display = "inline-block";
             saveBtn.style.display = "none";
-            setupAccordion(); // 重新載入訪客閱覽模式的點擊展開功能
         }
     </script>
 </body>

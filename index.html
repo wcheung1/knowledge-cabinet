@@ -16,10 +16,18 @@
         .sys-controls { margin-bottom: 30px; padding-bottom: 15px; border-bottom: 2px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .btn { padding: 8px 16px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; font-size: 14px; }
         .btn-login { background: #4285F4; color: white; }
-        .btn-edit, .btn-save, .btn-add, .btn-backup, .btn-restore { display: none; color: white; }
+        .btn-edit, .btn-save, .btn-add, .btn-add-private, .btn-backup, .btn-restore { display: none; color: white; }
         .btn-edit { background: #f39c12; } .btn-save { background: #2ecc71; } .btn-add { background: #3498db; }
+        .btn-add-private { background: #c0392b; }
         .btn-backup { background: #8e44ad; } .btn-restore { background: #d35400; }
         #statusMessage { font-weight: bold; color: #7f8c8d; }
+
+        /* 區域標題（公開 / 私人）—— 只有 Admin 登入後先顯示 */
+        .zone-header { display: none; font-size: 16px; font-weight: bold; padding: 8px 14px; border-radius: 6px; margin: 25px 0 12px; }
+        .zone-header small { font-weight: normal; font-size: 12px; opacity: 0.8; }
+        .zone-header.public-zone { background: #eaf6ff; color: #2471a3; border-left: 5px solid #3498db; }
+        .zone-header.private-zone { background: #fdf0ef; color: #c0392b; border-left: 5px solid #e74c3c; }
+
         .category { background: #fdfdfd; border: 2px solid #bdc3c7; border-radius: 8px; margin-bottom: 20px; padding: 15px; transition: 0.3s; }
         .category.dragging { opacity: 0.5; border: 2px dashed #3498db; background: #f0f8ff; }
         .category-header { font-size: 20px; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; margin-bottom: 15px; display: flex; align-items: center; }
@@ -52,15 +60,77 @@
                 <button id="restoreBtn" class="btn btn-restore">📤 還原</button>
                 <a href="admin-dashboard.html" id="dashboardBtn" class="btn btn-edit" style="background:#34495e; display:none; text-decoration:none;">🗄️ 進入後台</a>
                 <input type="file" id="restoreFile" accept=".json" style="display:none;">
-                <button id="addCategoryBtn" class="btn btn-add">📁 新增分類</button>
+                <button id="addCategoryBtn" class="btn btn-add">📁 新增分類 (公開)</button>
+                <button id="addPrivateCategoryBtn" class="btn btn-add-private">🔐 新增分類 (私人)</button>
                 <button id="editBtn" class="btn btn-edit">⚙️ 管理目錄</button>
                 <button id="saveBtn" class="btn btn-save">💾 儲存目錄</button>
             </div>
         </div>
+
+        <div class="zone-header public-zone" id="publicZoneHeader">🌐 公開區域 <small>（任何人攞到文章連結都開到；目錄本身仍然只有 Admin 見到）</small></div>
         <div id="indexContent">載入中...</div>
+
+        <div id="privateSection" style="display:none;">
+            <div class="zone-header private-zone" id="privateZoneHeader">🔒 私人區域 <small>（就算有人攞到連結，未以 Admin 登入一律睇唔到內容 —— 由 Firebase 規則喺 server 直接擋）</small></div>
+            <div id="privateContent">載入中...</div>
+        </div>
     </div>
 
     <script>
+        /* =========================================================
+           💡 避雷策略 3：借殼上市 (設定 Firebase)
+           請將下面嘅 config 替換為你嘅 Firebase 設定
+           ---------------------------------------------------------
+           ⚠ 下面個 apiKey 係公開嘅，冇問題 —— Firebase 個 apiKey 淨係識別
+           邊個 project，唔係密碼。真正擋人嘅係 Realtime Database 嘅安全規則。
+           截至 2026-08 已部署嘅規則（同 repo 入面 database.rules.json 一樣；
+           private_* 嗰四條係 2026-08 為「私人區域」功能加嘅）：
+             {
+          "rules": {
+            "pages": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_titles": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "main_title": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "index_content": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_parents": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_pages": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_titles": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_parents": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_index_content": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            }
+          }
+        }
+           即係：淨係本人('w.cheung815@gmail.com')先讀寫得到自己admin下面嗰份資料；root 同其他路徑冇寫
+           .read/.write，預設一律拒絕。未登入嗰陣 auth 係 null，條式永遠唔成立。
+           private_* 路徑連 .read 都鎖埋，所以「私人區域」嘅文章就算有 link 都開唔到。
+           ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
+           記得順手改返呢度同 database.rules.json，唔好等佢過時。
+        ========================================================= */
         const firebaseConfig = {
             apiKey: "AIzaSyDBNEWLMjXK91OWNz_dMNNsz1rS-XYkYoE",
             authDomain: "knowledge-cabinet.firebaseapp.com",
@@ -77,19 +147,31 @@
         const editBtn = document.getElementById('editBtn');
         const saveBtn = document.getElementById('saveBtn');
         const addCategoryBtn = document.getElementById('addCategoryBtn');
+        const addPrivateCategoryBtn = document.getElementById('addPrivateCategoryBtn');
         const backupBtn = document.getElementById('backupBtn');
         const restoreBtn = document.getElementById('restoreBtn');
         const restoreFile = document.getElementById('restoreFile');
         const indexContent = document.getElementById('indexContent');
+        const privateContent = document.getElementById('privateContent');
+        const privateSection = document.getElementById('privateSection');
+        const publicZoneHeader = document.getElementById('publicZoneHeader');
+        const privateZoneHeader = document.getElementById('privateZoneHeader');
         const mainTitle = document.getElementById('mainTitle');
         const mainContainer = document.getElementById('mainContainer');
         
         let isAdmin = false; let isEditing = false;
+        let dragOriginZone = null; // 記低拖曳緊嘅嘢由邊個區出發，唔俾跨區拖（跨區搬唔會搬埋資料，會造成假象）
         const defaultHTML = `<div class="category"><div class="category-header"><span class="drag-handle">☰</span><span class="cat-title">主要分類</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div></div>`;
+        const defaultPrivateHTML = `<div class="category"><div class="category-header"><span class="drag-handle">☰</span><span class="cat-title">私人分類</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div></div>`;
+
+        // 判斷一個元素屬於公開區定私人區
+        function zoneOf(el) {
+            return (el && el.closest && el.closest('#privateContent')) ? 'private' : 'public';
+        }
 
         // 將讀取資料寫成 Function，方便因應權限變化重新載入
         function loadData() {
-            db.ref('main_title').off(); db.ref('index_content').off();
+            db.ref('main_title').off(); db.ref('index_content').off(); db.ref('private_index_content').off();
             
             db.ref('main_title').on('value', snap => {
                 if (!isEditing && snap.exists()) {
@@ -108,6 +190,18 @@
                     indexContent.innerHTML = "<div style='text-align:center; padding: 40px; color:#7f8c8d; background:#f9f9f9; border-radius:10px;'><h2>🔒 目錄為私人區域</h2><p>只有管理員可以查看。請使用專屬連結閱讀個別文章。</p></div>";
                 }
             });
+
+            // 私人區目錄：只有 Admin 先讀（未登入讀都係俾 rules 彈返嚟，慳返個錯誤）
+            if (isAdmin) {
+                db.ref('private_index_content').on('value', snap => {
+                    if (!isEditing) {
+                        privateContent.innerHTML = snap.exists() ? snap.val() : defaultPrivateHTML;
+                        setupDragAndDrop(); setupButtons();
+                    }
+                }, err => {
+                    if(err.code === 'PERMISSION_DENIED') privateContent.innerHTML = "<p style='color:#e74c3c;'>🔒 讀取私人區域失敗（權限不足，請確認 database rules 已部署 private_* 路徑）。</p>";
+                });
+            }
         }
 
         auth.onAuthStateChanged(user => {
@@ -120,6 +214,9 @@
                 document.getElementById('dashboardBtn').style.display = "inline-block";
                 backupBtn.style.display = "inline-block";
                 restoreBtn.style.display = "inline-block";
+                privateSection.style.display = "block";
+                publicZoneHeader.style.display = "block";
+                privateZoneHeader.style.display = "block";
             } else {
                 isAdmin = false;
                 statusMessage.innerText = "訪客 (無權訪問目錄)";
@@ -130,6 +227,8 @@
                 document.getElementById('dashboardBtn').style.display = "none";
                 backupBtn.style.display = "none";
                 restoreBtn.style.display = "none";
+                privateSection.style.display = "none";
+                publicZoneHeader.style.display = "none";
                 if(user) auth.signOut();
             }
             loadData(); // 登入或登出都重新載入資料 (觸發權限檢查)
@@ -140,72 +239,94 @@
             else auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => alert(err.message));
         });
 
-        // Backup & Restore
+        // Backup & Restore（已包埋 private_* 四個節點）
         backupBtn.addEventListener('click', async () => {
             try {
-                // 將原來嘅按鈕文字改為提示中
                 const originalText = backupBtn.innerText;
                 backupBtn.innerText = "⏳ 備份打包中...";
                 
                 // 逐個合法嘅節點去讀取資料，避開根目錄 (Root) 嘅權限封鎖
-                const [pagesSnap, titlesSnap, mainSnap, indexSnap, parentsSnap] = await Promise.all([
+                const [pagesSnap, titlesSnap, mainSnap, indexSnap, parentsSnap,
+                       pPagesSnap, pTitlesSnap, pParentsSnap, pIndexSnap] = await Promise.all([
                     db.ref('pages').once('value'),
                     db.ref('page_titles').once('value'),
                     db.ref('main_title').once('value'),
                     db.ref('index_content').once('value'),
-                    db.ref('page_parents').once('value')
+                    db.ref('page_parents').once('value'),
+                    db.ref('private_pages').once('value'),
+                    db.ref('private_page_titles').once('value'),
+                    db.ref('private_page_parents').once('value'),
+                    db.ref('private_index_content').once('value')
                 ]);
 
-                // 重新組裝成一個完整嘅 JSON 物件
                 const backupData = {
                     pages: pagesSnap.val(),
                     page_titles: titlesSnap.val(),
                     main_title: mainSnap.val(),
                     index_content: indexSnap.val(),
-                    page_parents: parentsSnap.val()
+                    page_parents: parentsSnap.val(),
+                    private_pages: pPagesSnap.val(),
+                    private_page_titles: pTitlesSnap.val(),
+                    private_page_parents: pParentsSnap.val(),
+                    private_index_content: pIndexSnap.val()
                 };
 
-                // 觸發下載
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: 'application/json'});
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `cabinet_backup_${new Date().toISOString().split('T')[0]}.json`;
                 a.click();
                 
-                // 還原按鈕文字
                 backupBtn.innerText = originalText;
             } catch (err) {
                 alert("備份失敗（權限或連線問題）：" + err.message);
                 backupBtn.innerText = "📥 備份";
             }
         });
-        restoreBtn.addEventListener('click', () => { if(confirm("⚠️ 匯入將完全覆蓋目前雲端資料！確定繼續？")) restoreFile.click(); });
+        restoreBtn.addEventListener('click', () => { if(confirm("⚠️ 匯入將覆蓋備份檔內有嘅節點！確定繼續？")) restoreFile.click(); });
         restoreFile.addEventListener('change', (e) => {
             const file = e.target.files[0]; if(!file) return;
             const reader = new FileReader();
             reader.onload = (event) => {
                 try {
-                    db.ref('/').set(JSON.parse(event.target.result)).then(() => alert("✅ 還原成功！")).catch(err => alert("還原失敗：" + err.message));
+                    const data = JSON.parse(event.target.result);
+                    // Root 冇 .write 權限，所以要逐個節點寫入（同備份嘅思路一樣）
+                    // 只覆蓋備份檔入面「有出現」嘅 key —— 舊備份冇 private_* 就唔會誤刪私人區
+                    const KNOWN_KEYS = ['pages','page_titles','main_title','index_content','page_parents',
+                                        'private_pages','private_page_titles','private_page_parents','private_index_content'];
+                    const writes = KNOWN_KEYS
+                        .filter(k => Object.prototype.hasOwnProperty.call(data, k))
+                        .map(k => db.ref(k).set(data[k]));
+                    if (writes.length === 0) { alert("檔案入面搵唔到任何機櫃資料節點！"); return; }
+                    Promise.all(writes).then(() => alert("✅ 還原成功！")).catch(err => alert("還原失敗：" + err.message));
                 } catch(err) { alert("檔案格式錯誤！"); }
             };
             reader.readAsText(file);
+            restoreFile.value = "";
         });
 
-        function setupDragAndDrop() { /* (保留原有 Drag & Drop 邏輯，同之前一樣) */
-            indexContent.addEventListener('dragover', e => {
+        // 分類拖曳：公開區同私人區各自一個 container，唔俾跨區拖
+        function attachCategoryDrag(container, zone) {
+            container.addEventListener('dragover', e => {
                 e.preventDefault(); const draggingCat = document.querySelector('.category.dragging');
-                if(!draggingCat) return;
-                const afterElement = getDragAfterElement(indexContent, e.clientY, '.category:not(.dragging)');
-                if (afterElement == null) indexContent.appendChild(draggingCat); else indexContent.insertBefore(draggingCat, afterElement);
+                if(!draggingCat || dragOriginZone !== zone) return;
+                const afterElement = getDragAfterElement(container, e.clientY, '.category:not(.dragging)');
+                if (afterElement == null) container.appendChild(draggingCat); else container.insertBefore(draggingCat, afterElement);
             });
+        }
+        attachCategoryDrag(indexContent, 'public');
+        attachCategoryDrag(privateContent, 'private');
+
+        function setupDragAndDrop() {
             document.querySelectorAll('.link-list').forEach(list => {
-                list.addEventListener('dragover', e => {
+                // 用 ondragover 屬性避免重複疊加 listener
+                list.ondragover = e => {
                     e.preventDefault(); e.stopPropagation();
                     const draggingLink = document.querySelector('.link-item.dragging');
-                    if(!draggingLink) return;
+                    if(!draggingLink || zoneOf(list) !== dragOriginZone) return; // 唔俾跨區拖文章
                     const afterElement = getDragAfterElement(list, e.clientY, '.link-item:not(.dragging)');
                     if (afterElement == null) list.appendChild(draggingLink); else list.insertBefore(draggingLink, afterElement);
-                });
+                };
             });
         }
         function getDragAfterElement(container, y, selector) {
@@ -223,31 +344,36 @@
                 handle.onmouseleave = function() { const t = this.closest('.category-header') ? this.closest('.category') : this.closest('.link-item'); if(t) t.setAttribute('draggable', 'false'); };
             });
             document.querySelectorAll('.category').forEach(cat => {
-                cat.ondragstart = function(e) { if(e.target === cat) cat.classList.add('dragging'); };
-                cat.ondragend = function() { cat.classList.remove('dragging'); cat.setAttribute('draggable', 'false'); };
+                cat.ondragstart = function(e) { if(e.target === cat) { cat.classList.add('dragging'); dragOriginZone = zoneOf(cat); } };
+                cat.ondragend = function() { cat.classList.remove('dragging'); cat.setAttribute('draggable', 'false'); dragOriginZone = null; };
             });
             document.querySelectorAll('.link-item').forEach(item => {
-                item.ondragstart = function(e) { if(e.target === item) { item.classList.add('dragging'); e.stopPropagation(); } };
-                item.ondragend = function() { item.classList.remove('dragging'); item.setAttribute('draggable', 'false'); };
+                item.ondragstart = function(e) { if(e.target === item) { item.classList.add('dragging'); dragOriginZone = zoneOf(item); e.stopPropagation(); } };
+                item.ondragend = function() { item.classList.remove('dragging'); item.setAttribute('draggable', 'false'); dragOriginZone = null; };
             });
 
             document.querySelectorAll('.btn-add-link').forEach(btn => {
                 btn.onclick = async function() {
                     const list = this.parentElement.nextElementSibling;
+                    // 按下呢粒掣嗰刻，睇下佢身處公開區定私人區，決定寫去邊組節點
+                    const inPrivate = zoneOf(this) === 'private';
+                    const pagesPath   = inPrivate ? 'private_pages'        : 'pages';
+                    const parentsPath = inPrivate ? 'private_page_parents' : 'page_parents';
                     async function getValidId() {
-                        let customId = prompt("請設定 ID (例如：speech-2026)：", "");
+                        let customId = prompt((inPrivate ? "【🔒 私人區】" : "") + "請設定 ID (例如：speech-2026)：", "");
                         if (customId === null) return null;
                         let tempId = customId.trim() !== "" ? customId.trim().toLowerCase().replace(/\s+/g, '-') : 'page_' + Math.random().toString(36).substr(2, 6);
-                        const snap = await db.ref('pages/' + tempId).once('value');
+                        const snap = await db.ref(pagesPath + '/' + tempId).once('value');
                         if (snap.exists()) {
                             if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面，按【取消】重新設定。`)) return tempId;
                             return await getValidId();
                         } return tempId;
                     }
                     const finalId = await getValidId(); if (!finalId) return;
-                    db.ref('page_parents/' + finalId).set('index');
+                    db.ref(parentsPath + '/' + finalId).set('index');
+                    const href = `page.html?id=${finalId}` + (inPrivate ? '&zone=private' : '');
                     const newItem = document.createElement('div'); newItem.className = 'link-item';
-                    newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="page.html?id=${finalId}">點此修改新文章標題</a> <button class="btn-delete del-link">X</button>`;
+                    newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="${href}">${inPrivate ? '🔒 ' : ''}點此修改新文章標題</a> <button class="btn-delete del-link">X</button>`;
                     list.appendChild(newItem);
                     
                     const newAnchor = newItem.querySelector('a');
@@ -265,6 +391,7 @@
             isEditing = true;
             editBtn.style.display = "none"; backupBtn.style.display = "none"; restoreBtn.style.display = "none";
             saveBtn.style.display = "inline-block"; addCategoryBtn.style.display = "inline-block";
+            addPrivateCategoryBtn.style.display = "inline-block";
             mainContainer.classList.add('editing');
 
             mainTitle.setAttribute('contenteditable', 'true');
@@ -273,37 +400,46 @@
             setupButtons();
         });
 
-        addCategoryBtn.addEventListener('click', () => {
+        function makeCategory(targetContainer, defaultName) {
             const newCat = document.createElement('div'); newCat.className = 'category';
-            newCat.innerHTML = `<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title" contenteditable="true">新分類名稱</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>`;
-            indexContent.appendChild(newCat); setupDragAndDrop(); setupButtons();
-        });
+            newCat.innerHTML = `<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title" contenteditable="true">${defaultName}</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>`;
+            targetContainer.appendChild(newCat); setupDragAndDrop(); setupButtons();
+        }
+        addCategoryBtn.addEventListener('click', () => makeCategory(indexContent, '新分類名稱'));
+        addPrivateCategoryBtn.addEventListener('click', () => makeCategory(privateContent, '新私人分類'));
+
+        // 掃描某個區入面所有連結，將目錄嘅標題文字做成子頁面嘅預設標題
+        function syncTitles(container, titlesPath) {
+            container.querySelectorAll('.link-item a').forEach(a => {
+                const url = new URL(a.getAttribute('href'), window.location.href);
+                const pId = url.searchParams.get('id');
+                if (pId) {
+                    const linkText = a.innerText.replace(/^🔒\s*/, '').trim();
+                    db.ref(titlesPath + '/' + pId).once('value').then(snap => {
+                        if(!snap.exists() || snap.val().trim() === "" || snap.val() === "點此修改新文章標題") {
+                            db.ref(titlesPath + '/' + pId).set(linkText);
+                        }
+                    });
+                }
+            });
+        }
 
         saveBtn.addEventListener('click', () => {
             disableEditing();
             db.ref('main_title').set(mainTitle.innerHTML);
-            db.ref('index_content').set(indexContent.innerHTML).then(() => {
-                
-                // 【自動同步標題邏輯】掃描所有連結，將目錄嘅標題文字做成子頁面嘅預設標題
-                document.querySelectorAll('.link-item a').forEach(a => {
-                    const url = new URL(a.href, window.location.href);
-                    const pId = url.searchParams.get('id');
-                    if (pId) {
-                        const linkText = a.innerText.trim();
-                        db.ref('page_titles/' + pId).once('value').then(snap => {
-                            if(!snap.exists() || snap.val().trim() === "" || snap.val() === "點此修改新文章標題") {
-                                db.ref('page_titles/' + pId).set(linkText);
-                            }
-                        });
-                    }
-                });
-                alert("目錄已成功儲存至雲端！");
+            Promise.all([
+                db.ref('index_content').set(indexContent.innerHTML),
+                db.ref('private_index_content').set(privateContent.innerHTML)
+            ]).then(() => {
+                syncTitles(indexContent, 'page_titles');
+                syncTitles(privateContent, 'private_page_titles');
+                alert("目錄（公開＋私人）已成功儲存至雲端！");
             }).catch(err => alert("儲存失敗: " + err.message));
         });
 
         function disableEditing() {
             isEditing = false; mainContainer.classList.remove('editing');
-            addCategoryBtn.style.display = "none"; saveBtn.style.display = "none";
+            addCategoryBtn.style.display = "none"; addPrivateCategoryBtn.style.display = "none"; saveBtn.style.display = "none";
             if (isAdmin) { editBtn.style.display = "inline-block"; backupBtn.style.display = "inline-block"; restoreBtn.style.display = "inline-block"; }
             mainTitle.setAttribute('contenteditable', 'false');
             document.querySelectorAll('.cat-title, .link-item a').forEach(el => el.setAttribute('contenteditable', 'false'));
