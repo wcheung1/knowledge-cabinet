@@ -22,6 +22,9 @@
         .btn-backup { background: #8e44ad; } .btn-restore { background: #d35400; }
         #statusMessage { font-weight: bold; color: #7f8c8d; }
 
+        /* 編輯模式提示條 */
+        #editHint { display: none; background: #fef9e7; border-left: 5px solid #f39c12; color: #7d6608; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; }
+
         /* 區域標題（公開 / 私人）—— 只有 Admin 登入後先顯示 */
         .zone-header { display: none; font-size: 16px; font-weight: bold; padding: 8px 14px; border-radius: 6px; margin: 25px 0 12px; }
         .zone-header small { font-weight: normal; font-size: 12px; opacity: 0.8; }
@@ -30,7 +33,17 @@
 
         .category { background: #fdfdfd; border: 2px solid #bdc3c7; border-radius: 8px; margin-bottom: 20px; padding: 15px; transition: 0.3s; }
         .category.dragging { opacity: 0.5; border: 2px dashed #3498db; background: #f0f8ff; }
-        .category-header { font-size: 20px; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; margin-bottom: 15px; display: flex; align-items: center; }
+        .category-header { font-size: 20px; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; margin-bottom: 15px; display: flex; align-items: center; cursor: pointer; }
+
+        /* ===== 分類摺疊：預設淨係 show 個大標題 =====
+           .cat-open 係執行時先加上去嘅，唔會存落雲端。 */
+        .category .link-list { display: none; }
+        .category.cat-open .link-list { display: block; }
+        .cat-toggle { font-size: 14px; color: #7f8c8d; margin-right: 8px; width: 14px; flex-shrink: 0; user-select: none; }
+        .cat-count { background: #ecf0f1; color: #7f8c8d; font-size: 12px; font-weight: normal; padding: 2px 8px; border-radius: 10px; margin-left: 10px; flex-shrink: 0; }
+        .category.cat-open > .category-header { margin-bottom: 15px; }
+        .category:not(.cat-open) > .category-header { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+
         .link-list { min-height: 50px; padding: 10px; background: #f4f7f6; border-radius: 6px; }
         .link-item { background: #fff; margin-bottom: 10px; padding: 12px 15px; border-radius: 6px; border: 1px solid #ddd; display: flex; align-items: center; transition: 0.2s; }
         .link-item:hover { box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
@@ -44,6 +57,20 @@
         .editing .btn-add-link { display: inline-block; }
         .btn-delete { background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: 10px; }
         .editing .btn-delete { display: inline-block; }
+
+        /* ===== 拖曳緊嘅時候 ===== */
+        /* 拉緊一篇文章：所有分類臨時攤開，等你搵到位放低 */
+        body.link-dragging .category .link-list { display: block; }
+        body.link-dragging #indexContent, body.link-dragging #privateContent,
+        body.cat-dragging #indexContent, body.cat-dragging #privateContent {
+            outline: 2px dashed #bdc3c7; outline-offset: 8px; border-radius: 8px; min-height: 60px;
+        }
+        body.link-dragging #privateContent, body.cat-dragging #privateContent { outline-color: #e74c3c; }
+        body.link-dragging #indexContent, body.cat-dragging #indexContent { outline-color: #3498db; }
+
+        #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
+        #busyOverlay { display: none; position: fixed; inset: 0; background: rgba(44,62,80,0.55); z-index: 10000; align-items: center; justify-content: center; }
+        #busyOverlay .busy-box { background: #fff; padding: 22px 30px; border-radius: 10px; font-weight: bold; color: #2c3e50; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; max-width: 320px; }
     </style>
 </head>
 <body>
@@ -63,8 +90,12 @@
                 <button id="addCategoryBtn" class="btn btn-add">📁 新增分類 (公開)</button>
                 <button id="addPrivateCategoryBtn" class="btn btn-add-private">🔐 新增分類 (私人)</button>
                 <button id="editBtn" class="btn btn-edit">⚙️ 管理目錄</button>
-                <button id="saveBtn" class="btn btn-save">💾 儲存目錄</button>
+                <button id="saveBtn" class="btn btn-save">💾 儲存並完成</button>
             </div>
+        </div>
+
+        <div id="editHint">
+            💡 撳<b>分類標題</b>可以攤開／收埋　·　改完標題撳去<b>其他地方</b>就會自動儲存　·　用 <b>☰</b> 可以拖曳排序，仲可以<b>直接拖過另一個區域</b>（會連埋子頁面一齊搬）
         </div>
 
         <div class="zone-header public-zone" id="publicZoneHeader">🌐 公開區域 <small>（任何人攞到文章連結都開到；目錄本身仍然只有 Admin 見到）</small></div>
@@ -75,6 +106,9 @@
             <div id="privateContent">載入中...</div>
         </div>
     </div>
+
+    <div id="toast"></div>
+    <div id="busyOverlay"><div class="busy-box">⏳ <span id="busyMsg">處理中…</span></div></div>
 
     <script>
         /* =========================================================
@@ -158,35 +192,177 @@
         const privateZoneHeader = document.getElementById('privateZoneHeader');
         const mainTitle = document.getElementById('mainTitle');
         const mainContainer = document.getElementById('mainContainer');
+        const editHint = document.getElementById('editHint');
+        const toastEl = document.getElementById('toast');
+        const busyOverlay = document.getElementById('busyOverlay');
+        const busyMsg = document.getElementById('busyMsg');
         
         let isAdmin = false; let isEditing = false;
-        let dragOriginZone = null; // 記低拖曳緊嘅嘢由邊個區出發，唔俾跨區拖（跨區搬唔會搬埋資料，會造成假象）
+        let isDirty = false;              // 有冇未儲存嘅改動
+        let lastEditedEl = null;          // 最後改緊嘅嗰格（撳出面就儲存佢）
+        let autoSaveTimer = null;
+        let publicLoaded = false, privateLoaded = false;   // 未載入成功就唔准覆蓋，免得儲存時清空咗
+        let dragOriginZone = null, dragOrigin = null;      // 拖曳前嘅位置，取消跨區時搬返去
+
         const defaultHTML = `<div class="category"><div class="category-header"><span class="drag-handle">☰</span><span class="cat-title">主要分類</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div></div>`;
         const defaultPrivateHTML = `<div class="category"><div class="category-header"><span class="drag-handle">☰</span><span class="cat-title">私人分類</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div></div>`;
 
-        // 判斷一個元素屬於公開區定私人區
-        function zoneOf(el) {
-            return (el && el.closest && el.closest('#privateContent')) ? 'private' : 'public';
+        // ---------- 小工具 ----------
+        function toast(msg, isError) {
+            toastEl.innerHTML = msg;
+            toastEl.style.background = isError ? '#c0392b' : '#2c3e50';
+            toastEl.style.display = 'block';
+            clearTimeout(toastEl._t);
+            toastEl._t = setTimeout(() => { toastEl.style.display = 'none'; }, 2800);
+        }
+        function busy(on, msg) {
+            busyOverlay.style.display = on ? 'flex' : 'none';
+            if (msg) busyMsg.textContent = msg;
+        }
+        function markDirty() { if (isEditing) isDirty = true; }
+        function zoneOf(el) { return (el && el.closest && el.closest('#privateContent')) ? 'private' : 'public'; }
+        function paths(zone) {
+            const p = zone === 'private' ? 'private_' : '';
+            return { pages: p + 'pages', titles: p + 'page_titles', parents: p + 'page_parents', index: p ? 'private_index_content' : 'index_content' };
+        }
+        function idOfLink(item) {
+            const a = item.querySelector('a'); if (!a) return null;
+            try { return new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); }
+            catch (e) { return null; }
         }
 
-        // 將讀取資料寫成 Function，方便因應權限變化重新載入
+        /* ===================================================================
+           分類摺疊：▸／▾ 同埋篇數，全部都係執行時加，唔會存落雲端
+           =================================================================== */
+        function decorateCategories() {
+            document.querySelectorAll('#indexContent .category, #privateContent .category').forEach(cat => {
+                const header = cat.querySelector('.category-header');
+                if (!header) return;
+                if (!header.querySelector('.cat-toggle')) {
+                    const t = document.createElement('span');
+                    t.className = 'cat-toggle'; t.setAttribute('contenteditable', 'false');
+                    header.prepend(t);
+                }
+                let badge = header.querySelector('.cat-count');
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'cat-count'; badge.setAttribute('contenteditable', 'false');
+                    const title = header.querySelector('.cat-title');
+                    if (title && title.after) title.after(badge); else header.appendChild(badge);
+                }
+                badge.textContent = cat.querySelectorAll('.link-item').length + ' 篇';
+                syncToggle(cat);
+            });
+        }
+        function syncToggle(cat) {
+            const t = cat.querySelector('.cat-toggle');
+            if (t) t.textContent = cat.classList.contains('cat-open') ? '▾' : '▸';
+        }
+        function onHeaderClick(e) {
+            const header = e.target.closest('.category-header');
+            if (!header) return;
+            if (e.target.closest('button') || e.target.closest('.drag-handle')) return;
+            // 編輯模式撳住標題文字係打字，唔好摺埋；撳個箭嘴、篇數或者空位就開合
+            if (isEditing && e.target.closest('.cat-title')) return;
+            const cat = header.closest('.category');
+            cat.classList.toggle('cat-open');
+            syncToggle(cat);
+        }
+        indexContent.addEventListener('click', onHeaderClick);
+        privateContent.addEventListener('click', onHeaderClick);
+
+        /* ===================================================================
+           儲存：先整一份乾淨 HTML（拆走 ▸／篇數、cat-open、contenteditable）
+           =================================================================== */
+        function cleanHTML(container) {
+            const c = container.cloneNode(true);
+            c.querySelectorAll('.cat-toggle, .cat-count').forEach(n => n.remove());
+            c.querySelectorAll('.category, .link-item').forEach(n => n.classList.remove('cat-open', 'dragging'));
+            c.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+            c.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
+            return c.innerHTML;
+        }
+
+        // 掃描某個區入面所有連結，將目錄嘅標題文字做成子頁面嘅預設標題
+        function syncTitles(container, titlesPath) {
+            container.querySelectorAll('.link-item a').forEach(a => {
+                let pId = null;
+                try { pId = new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); } catch (e) { return; }
+                if (!pId) return;
+                // ⚠ 用 textContent 而唔用 innerText：收埋咗嘅分類入面，innerText 會係空白
+                const linkText = a.textContent.replace(/^🔒\s*/, '').trim();
+                db.ref(titlesPath + '/' + pId).once('value').then(snap => {
+                    if (!snap.exists() || snap.val().trim() === "" || snap.val() === "點此修改新文章標題") {
+                        db.ref(titlesPath + '/' + pId).set(linkText);
+                    }
+                });
+            });
+        }
+
+        function saveAll(silent) {
+            const jobs = [db.ref('main_title').set(mainTitle.innerHTML)];
+            // 未成功載入嗰個區就唔好寫，免得一儲存就清空咗雲端資料
+            if (publicLoaded) jobs.push(db.ref('index_content').set(cleanHTML(indexContent)));
+            if (privateLoaded) jobs.push(db.ref('private_index_content').set(cleanHTML(privateContent)));
+            isDirty = false;
+            return Promise.all(jobs).then(() => {
+                if (publicLoaded) syncTitles(indexContent, 'page_titles');
+                if (privateLoaded) syncTitles(privateContent, 'private_page_titles');
+                toast(silent ? '💾 已自動儲存' : '✅ 目錄已儲存至雲端');
+            }).catch(err => {
+                isDirty = true;
+                toast('❌ 儲存失敗：' + err.message, true);
+                if (!silent) alert("儲存失敗: " + err.message);
+            });
+        }
+        function scheduleAutoSave(delay) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => { if (isEditing && isDirty) saveAll(true); }, delay || 1200);
+        }
+
+        // 改完嘢，一撳去嗰格以外 → 即刻儲存
+        document.addEventListener('input', e => {
+            if (!isEditing) return;
+            isDirty = true;
+            lastEditedEl = (e.target.closest && e.target.closest('[contenteditable="true"]')) || e.target;
+        }, true);
+        document.addEventListener('mousedown', e => {
+            if (!isEditing || !isDirty || !lastEditedEl || !e.target.closest) return;
+            if (lastEditedEl === e.target || lastEditedEl.contains(e.target)) return;
+            lastEditedEl = null;
+            clearTimeout(autoSaveTimer);
+            saveAll(true);
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden' && isEditing && isDirty) saveAll(true);
+        });
+        window.addEventListener('beforeunload', e => { if (isEditing && isDirty) { e.preventDefault(); e.returnValue = ''; } });
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && (e.key || '').toLowerCase() === 's' && isEditing) { e.preventDefault(); saveAll(false); }
+        });
+
+        /* ===================================================================
+           讀取資料
+           =================================================================== */
         function loadData() {
             db.ref('main_title').off(); db.ref('index_content').off(); db.ref('private_index_content').off();
             
             db.ref('main_title').on('value', snap => {
                 if (!isEditing && snap.exists()) {
                     mainTitle.innerHTML = snap.val();
-                    document.title = mainTitle.innerText.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').trim() + " - 總目錄";
+                    document.title = mainTitle.textContent.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '').trim() + " - 總目錄";
                 }
             }, err => { if(err.code === 'PERMISSION_DENIED') mainTitle.innerHTML = "🔒 私人網絡機櫃"; });
 
             db.ref('index_content').on('value', snap => {
                 if (!isEditing) {
                     indexContent.innerHTML = snap.exists() ? snap.val() : defaultHTML;
-                    setupDragAndDrop(); setupButtons();
+                    publicLoaded = true;
+                    decorateCategories(); setupButtons();
                 }
             }, err => {
                 if(err.code === 'PERMISSION_DENIED') {
+                    publicLoaded = false;
                     indexContent.innerHTML = "<div style='text-align:center; padding: 40px; color:#7f8c8d; background:#f9f9f9; border-radius:10px;'><h2>🔒 目錄為私人區域</h2><p>只有管理員可以查看。請使用專屬連結閱讀個別文章。</p></div>";
                 }
             });
@@ -196,9 +372,11 @@
                 db.ref('private_index_content').on('value', snap => {
                     if (!isEditing) {
                         privateContent.innerHTML = snap.exists() ? snap.val() : defaultPrivateHTML;
-                        setupDragAndDrop(); setupButtons();
+                        privateLoaded = true;
+                        decorateCategories(); setupButtons();
                     }
                 }, err => {
+                    privateLoaded = false;
                     if(err.code === 'PERMISSION_DENIED') privateContent.innerHTML = "<p style='color:#e74c3c;'>🔒 讀取私人區域失敗（權限不足，請確認 database rules 已部署 private_* 路徑）。</p>";
                 });
             }
@@ -218,7 +396,7 @@
                 publicZoneHeader.style.display = "block";
                 privateZoneHeader.style.display = "block";
             } else {
-                isAdmin = false;
+                isAdmin = false; privateLoaded = false;
                 statusMessage.innerText = "訪客 (無權訪問目錄)";
                 statusMessage.style.color = "#e74c3c";
                 loginBtn.innerText = "Admin 登入";
@@ -239,7 +417,9 @@
             else auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => alert(err.message));
         });
 
-        // Backup & Restore（已包埋 private_* 四個節點）
+        /* ===================================================================
+           Backup & Restore（已包埋 private_* 四個節點）
+           =================================================================== */
         backupBtn.addEventListener('click', async () => {
             try {
                 const originalText = backupBtn.innerText;
@@ -305,25 +485,26 @@
             restoreFile.value = "";
         });
 
-        // 分類拖曳：公開區同私人區各自一個 container，唔俾跨區拖
-        function attachCategoryDrag(container, zone) {
+        /* ===================================================================
+           拖曳排序（而家容許跨區）
+           =================================================================== */
+        function attachCategoryDrag(container) {
             container.addEventListener('dragover', e => {
                 e.preventDefault(); const draggingCat = document.querySelector('.category.dragging');
-                if(!draggingCat || dragOriginZone !== zone) return;
+                if(!draggingCat) return;
                 const afterElement = getDragAfterElement(container, e.clientY, '.category:not(.dragging)');
                 if (afterElement == null) container.appendChild(draggingCat); else container.insertBefore(draggingCat, afterElement);
             });
         }
-        attachCategoryDrag(indexContent, 'public');
-        attachCategoryDrag(privateContent, 'private');
+        attachCategoryDrag(indexContent);
+        attachCategoryDrag(privateContent);
 
         function setupDragAndDrop() {
             document.querySelectorAll('.link-list').forEach(list => {
-                // 用 ondragover 屬性避免重複疊加 listener
                 list.ondragover = e => {
                     e.preventDefault(); e.stopPropagation();
                     const draggingLink = document.querySelector('.link-item.dragging');
-                    if(!draggingLink || zoneOf(list) !== dragOriginZone) return; // 唔俾跨區拖文章
+                    if(!draggingLink) return;
                     const afterElement = getDragAfterElement(list, e.clientY, '.link-item:not(.dragging)');
                     if (afterElement == null) list.appendChild(draggingLink); else list.insertBefore(draggingLink, afterElement);
                 };
@@ -337,40 +518,218 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
+        /* ===================================================================
+           跨區搬遷：唔淨止搬個連結，仲要搬埋雲端資料同所有子頁面
+           唔搬子頁面嘅話，你以為收埋咗，但子頁面其實仲喺公開區任人睇 —— 好大鑊。
+           =================================================================== */
+        async function collectSubtree(rootIds, fromZone) {
+            const P = paths(fromZone);
+            const snap = await db.ref(P.parents).once('value');
+            const parents = snap.val() || {};
+            const childrenOf = {};
+            Object.keys(parents).forEach(k => {
+                const p = parents[k];
+                (childrenOf[p] = childrenOf[p] || []).push(k);
+            });
+            const out = []; const queue = [...rootIds];
+            while (queue.length) {
+                const cur = queue.shift();
+                if (!cur || out.indexOf(cur) !== -1) continue;
+                out.push(cur);
+                (childrenOf[cur] || []).forEach(c => queue.push(c));
+            }
+            return out;
+        }
+
+        // 搬咗過去之後，頁面內容入面指向子頁面嘅連結都要跟住改（加／減 &zone=private）
+        function rewriteZoneLinks(html, toPrivate, idSet) {
+            if (typeof html !== 'string' || !html) return html;
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.querySelectorAll('a[href*="page.html"]').forEach(a => {
+                let id = null;
+                try { id = new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); } catch (e) { return; }
+                if (!id || !idSet.has(id)) return;   // 只改「一齊搬緊」嗰批，唔關事嘅唔郁
+                a.setAttribute('href', 'page.html?id=' + id + (toPrivate ? '&zone=private' : ''));
+            });
+            return doc.body.innerHTML;
+        }
+
+        async function moveIds(ids, fromZone, toZone) {
+            const F = paths(fromZone), T = paths(toZone);
+            const toPrivate = toZone === 'private';
+            const idSet = new Set(ids);
+
+            // 1) 先確認目的地冇同名 ID，唔係會覆蓋咗人哋
+            for (const id of ids) {
+                const exist = await db.ref(T.pages + '/' + id).once('value');
+                if (exist.exists()) throw new Error(`目的地已經有一個 ID「${id}」，為安全起見停止搬遷。請先改名再試。`);
+            }
+
+            // 2) 讀晒所有資料
+            const data = {};
+            for (const id of ids) {
+                const [p, t, pa] = await Promise.all([
+                    db.ref(F.pages + '/' + id).once('value'),
+                    db.ref(F.titles + '/' + id).once('value'),
+                    db.ref(F.parents + '/' + id).once('value')
+                ]);
+                data[id] = { page: p.val(), title: t.val(), parent: pa.val() };
+            }
+
+            // 3) 寫入目的地（全部寫完先至刪原本嗰邊，中途失敗最多係重覆，唔會唔見咗）
+            const writes = [];
+            for (const id of ids) {
+                const d = data[id];
+                if (d.page !== null && d.page !== undefined) writes.push(db.ref(T.pages + '/' + id).set(rewriteZoneLinks(d.page, toPrivate, idSet)));
+                if (d.title !== null && d.title !== undefined) writes.push(db.ref(T.titles + '/' + id).set(d.title));
+                if (d.parent !== null && d.parent !== undefined) writes.push(db.ref(T.parents + '/' + id).set(d.parent));
+            }
+            await Promise.all(writes);
+
+            // 4) 清走舊區嘅資料
+            const dels = [];
+            for (const id of ids) {
+                dels.push(db.ref(F.pages + '/' + id).remove());
+                dels.push(db.ref(F.titles + '/' + id).remove());
+                dels.push(db.ref(F.parents + '/' + id).remove());
+            }
+            await Promise.all(dels);
+        }
+
+        async function handleZoneMove(el, fromZone, toZone, origin) {
+            const toPrivate = toZone === 'private';
+            const links = el.classList.contains('link-item') ? [el] : [...el.querySelectorAll('.link-item')];
+            const rootIds = links.map(idOfLink).filter(Boolean);
+
+            if (rootIds.length === 0) {   // 空分類，冇資料要搬
+                markDirty(); await saveAll(true); decorateCategories(); return;
+            }
+
+            let allIds = [];
+            try {
+                busy(true, '正在檢查子頁面…');
+                allIds = await collectSubtree(rootIds, fromZone);
+                busy(false);
+            } catch (err) {
+                busy(false); alert('讀取資料失敗：' + err.message);
+                restoreDragPosition(el, origin); return;
+            }
+
+            const extra = allIds.length - rootIds.length;
+            const msg = toPrivate
+                ? `將 ${rootIds.length} 篇文章由【🌐 公開區】搬入【🔒 私人區】？\n`
+                : `將 ${rootIds.length} 篇文章由【🔒 私人區】搬返【🌐 公開區】？\n`;
+            const detail =
+                (extra > 0 ? `\n連埋佢哋下面 ${extra} 個子頁面，一共 ${allIds.length} 頁一齊搬。\n` : `\n（冇子頁面）\n`) +
+                (toPrivate
+                    ? `\n⚠ 搬完之後：\n• 舊連結會失效，之前分享咗俾人嘅 link 一律開唔到\n• 只有你登入咗先睇得到`
+                    : `\n⚠ 搬完之後：\n• 呢 ${allIds.length} 頁會變成任何人攞到連結都睇得到\n• 舊嘅私人連結（帶 &zone=private）會失效`);
+
+            if (!confirm(msg + detail)) { restoreDragPosition(el, origin); return; }
+
+            try {
+                busy(true, `正在搬遷 ${allIds.length} 頁…`);
+                await moveIds(allIds, fromZone, toZone);
+
+                // 更新目錄入面嗰啲連結（href 加／減 &zone=private，順手加減個 🔒）
+                links.forEach(item => {
+                    const a = item.querySelector('a'); if (!a) return;
+                    const id = idOfLink(item); if (!id) return;
+                    a.setAttribute('href', 'page.html?id=' + id + (toPrivate ? '&zone=private' : ''));
+                    const t = a.textContent.replace(/^🔒\s*/, '').trim();   // 同上：唔可以用 innerText
+                    a.textContent = (toPrivate ? '🔒 ' : '') + t;
+                });
+
+                markDirty();
+                await saveAll(true);
+                busy(false);
+                decorateCategories();
+                toast(`✅ 已搬遷 ${allIds.length} 頁到${toPrivate ? '🔒 私人區' : '🌐 公開區'}`);
+            } catch (err) {
+                busy(false);
+                alert('搬遷失敗：' + err.message + '\n\n目錄會回復原狀，雲端資料未有刪走，請重新整理頁面再試。');
+                restoreDragPosition(el, origin);
+            }
+        }
+
+        function restoreDragPosition(el, origin) {
+            if (!origin || !origin.parent) return;
+            if (origin.next && origin.next.isConnected) origin.parent.insertBefore(el, origin.next);
+            else origin.parent.appendChild(el);
+            decorateCategories();
+        }
+
+        /* ===================================================================
+           各個按鈕
+           =================================================================== */
         function setupButtons() {
+            setupDragAndDrop();
+
             document.querySelectorAll('.drag-handle').forEach(handle => {
                 handle.onmousedown = function() { const t = this.closest('.category-header') ? this.closest('.category') : this.closest('.link-item'); if(t) t.setAttribute('draggable', 'true'); };
                 handle.onmouseup = function() { const t = this.closest('.category-header') ? this.closest('.category') : this.closest('.link-item'); if(t) t.setAttribute('draggable', 'false'); };
                 handle.onmouseleave = function() { const t = this.closest('.category-header') ? this.closest('.category') : this.closest('.link-item'); if(t) t.setAttribute('draggable', 'false'); };
             });
+
             document.querySelectorAll('.category').forEach(cat => {
-                cat.ondragstart = function(e) { if(e.target === cat) { cat.classList.add('dragging'); dragOriginZone = zoneOf(cat); } };
-                cat.ondragend = function() { cat.classList.remove('dragging'); cat.setAttribute('draggable', 'false'); dragOriginZone = null; };
+                cat.ondragstart = function(e) {
+                    if (e.target !== cat) return;
+                    cat.classList.add('dragging');
+                    dragOriginZone = zoneOf(cat);
+                    dragOrigin = { parent: cat.parentNode, next: cat.nextElementSibling };
+                    document.body.classList.add('cat-dragging');
+                };
+                cat.ondragend = async function() {
+                    cat.classList.remove('dragging'); cat.setAttribute('draggable', 'false');
+                    document.body.classList.remove('cat-dragging');
+                    const from = dragOriginZone, origin = dragOrigin;
+                    dragOriginZone = null; dragOrigin = null;
+                    const to = zoneOf(cat);
+                    if (from && to !== from) await handleZoneMove(cat, from, to, origin);
+                    else { markDirty(); scheduleAutoSave(); }
+                };
             });
+
             document.querySelectorAll('.link-item').forEach(item => {
-                item.ondragstart = function(e) { if(e.target === item) { item.classList.add('dragging'); dragOriginZone = zoneOf(item); e.stopPropagation(); } };
-                item.ondragend = function() { item.classList.remove('dragging'); item.setAttribute('draggable', 'false'); dragOriginZone = null; };
+                item.ondragstart = function(e) {
+                    if (e.target !== item) return;
+                    item.classList.add('dragging');
+                    dragOriginZone = zoneOf(item);
+                    dragOrigin = { parent: item.parentNode, next: item.nextElementSibling };
+                    document.body.classList.add('link-dragging');   // 拉緊文章 → 所有分類臨時攤開
+                    e.stopPropagation();
+                };
+                item.ondragend = async function() {
+                    item.classList.remove('dragging'); item.setAttribute('draggable', 'false');
+                    document.body.classList.remove('link-dragging');
+                    const from = dragOriginZone, origin = dragOrigin;
+                    dragOriginZone = null; dragOrigin = null;
+                    const to = zoneOf(item);
+                    if (from && to !== from) await handleZoneMove(item, from, to, origin);
+                    else { markDirty(); scheduleAutoSave(); decorateCategories(); }
+                };
             });
 
             document.querySelectorAll('.btn-add-link').forEach(btn => {
                 btn.onclick = async function() {
-                    const list = this.parentElement.nextElementSibling;
+                    const cat = this.closest('.category');
+                    const list = cat.querySelector('.link-list');
+                    cat.classList.add('cat-open'); syncToggle(cat);   // 加文章一定要見到佢
                     // 按下呢粒掣嗰刻，睇下佢身處公開區定私人區，決定寫去邊組節點
                     const inPrivate = zoneOf(this) === 'private';
-                    const pagesPath   = inPrivate ? 'private_pages'        : 'pages';
-                    const parentsPath = inPrivate ? 'private_page_parents' : 'page_parents';
+                    const P = paths(inPrivate ? 'private' : 'public');
                     async function getValidId() {
                         let customId = prompt((inPrivate ? "【🔒 私人區】" : "") + "請設定 ID (例如：speech-2026)：", "");
                         if (customId === null) return null;
                         let tempId = customId.trim() !== "" ? customId.trim().toLowerCase().replace(/\s+/g, '-') : 'page_' + Math.random().toString(36).substr(2, 6);
-                        const snap = await db.ref(pagesPath + '/' + tempId).once('value');
+                        const snap = await db.ref(P.pages + '/' + tempId).once('value');
                         if (snap.exists()) {
                             if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面，按【取消】重新設定。`)) return tempId;
                             return await getValidId();
                         } return tempId;
                     }
                     const finalId = await getValidId(); if (!finalId) return;
-                    db.ref(parentsPath + '/' + finalId).set('index');
+                    db.ref(P.parents + '/' + finalId).set('index');
                     const href = `page.html?id=${finalId}` + (inPrivate ? '&zone=private' : '');
                     const newItem = document.createElement('div'); newItem.className = 'link-item';
                     newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="${href}">${inPrivate ? '🔒 ' : ''}點此修改新文章標題</a> <button class="btn-delete del-link">X</button>`;
@@ -379,12 +738,25 @@
                     const newAnchor = newItem.querySelector('a');
                     newAnchor.setAttribute('contenteditable', 'true');
                     newAnchor.onclick = e => e.preventDefault();
-                    setupButtons();
+                    setupButtons(); decorateCategories();
+                    markDirty(); scheduleAutoSave();
                 };
             });
 
-            document.querySelectorAll('.del-cat').forEach(btn => { btn.onclick = function() { if(confirm('確定刪除分類及所有文章？')) this.closest('.category').remove(); }; });
-            document.querySelectorAll('.del-link').forEach(btn => { btn.onclick = function() { if(confirm('確定移除連結？')) this.closest('.link-item').remove(); }; });
+            document.querySelectorAll('.del-cat').forEach(btn => {
+                btn.onclick = function() {
+                    if(!confirm('確定刪除分類及所有文章？\n（文章內容仍然留喺雲端，可以喺後台睇返「孤立」頁面）')) return;
+                    this.closest('.category').remove();
+                    markDirty(); scheduleAutoSave(); decorateCategories();
+                };
+            });
+            document.querySelectorAll('.del-link').forEach(btn => {
+                btn.onclick = function() {
+                    if(!confirm('確定移除連結？\n（文章內容仍然留喺雲端）')) return;
+                    this.closest('.link-item').remove();
+                    markDirty(); scheduleAutoSave(); decorateCategories();
+                };
+            });
         }
 
         editBtn.addEventListener('click', () => {
@@ -393,53 +765,37 @@
             saveBtn.style.display = "inline-block"; addCategoryBtn.style.display = "inline-block";
             addPrivateCategoryBtn.style.display = "inline-block";
             mainContainer.classList.add('editing');
+            editHint.style.display = "block";
 
             mainTitle.setAttribute('contenteditable', 'true');
             document.querySelectorAll('.cat-title').forEach(el => el.setAttribute('contenteditable', 'true'));
             document.querySelectorAll('.link-item a').forEach(el => { el.setAttribute('contenteditable', 'true'); el.onclick = e => e.preventDefault(); });
-            setupButtons();
+            setupButtons(); decorateCategories();
+            toast('⚙️ 管理模式：改完撳去其他地方就會自動儲存');
         });
 
         function makeCategory(targetContainer, defaultName) {
-            const newCat = document.createElement('div'); newCat.className = 'category';
+            const newCat = document.createElement('div'); newCat.className = 'category cat-open';
             newCat.innerHTML = `<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title" contenteditable="true">${defaultName}</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>`;
-            targetContainer.appendChild(newCat); setupDragAndDrop(); setupButtons();
+            targetContainer.appendChild(newCat);
+            setupButtons(); decorateCategories();
+            markDirty(); scheduleAutoSave();
+            newCat.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         addCategoryBtn.addEventListener('click', () => makeCategory(indexContent, '新分類名稱'));
         addPrivateCategoryBtn.addEventListener('click', () => makeCategory(privateContent, '新私人分類'));
 
-        // 掃描某個區入面所有連結，將目錄嘅標題文字做成子頁面嘅預設標題
-        function syncTitles(container, titlesPath) {
-            container.querySelectorAll('.link-item a').forEach(a => {
-                const url = new URL(a.getAttribute('href'), window.location.href);
-                const pId = url.searchParams.get('id');
-                if (pId) {
-                    const linkText = a.innerText.replace(/^🔒\s*/, '').trim();
-                    db.ref(titlesPath + '/' + pId).once('value').then(snap => {
-                        if(!snap.exists() || snap.val().trim() === "" || snap.val() === "點此修改新文章標題") {
-                            db.ref(titlesPath + '/' + pId).set(linkText);
-                        }
-                    });
-                }
-            });
-        }
-
         saveBtn.addEventListener('click', () => {
-            disableEditing();
-            db.ref('main_title').set(mainTitle.innerHTML);
-            Promise.all([
-                db.ref('index_content').set(indexContent.innerHTML),
-                db.ref('private_index_content').set(privateContent.innerHTML)
-            ]).then(() => {
-                syncTitles(indexContent, 'page_titles');
-                syncTitles(privateContent, 'private_page_titles');
-                alert("目錄（公開＋私人）已成功儲存至雲端！");
-            }).catch(err => alert("儲存失敗: " + err.message));
+            clearTimeout(autoSaveTimer);
+            saveAll(false).then(() => disableEditing());
         });
 
         function disableEditing() {
-            isEditing = false; mainContainer.classList.remove('editing');
+            isEditing = false; isDirty = false; lastEditedEl = null;
+            clearTimeout(autoSaveTimer);
+            mainContainer.classList.remove('editing');
             addCategoryBtn.style.display = "none"; addPrivateCategoryBtn.style.display = "none"; saveBtn.style.display = "none";
+            editHint.style.display = "none";
             if (isAdmin) { editBtn.style.display = "inline-block"; backupBtn.style.display = "inline-block"; restoreBtn.style.display = "inline-block"; }
             mainTitle.setAttribute('contenteditable', 'false');
             document.querySelectorAll('.cat-title, .link-item a').forEach(el => el.setAttribute('contenteditable', 'false'));
