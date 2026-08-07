@@ -36,6 +36,9 @@
         .btn-add { background: #3498db; color: white; display: none; } 
         #statusMessage { font-weight: bold; color: #7f8c8d; }
 
+        /* 編輯模式提示條 */
+        #editHint { display: none; background: #fef9e7; border-left: 5px solid #f39c12; color: #7d6608; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 15px; }
+
         .box { border: 2px solid #ecf0f1; border-radius: 8px; margin-bottom: 15px; overflow: hidden; transition: border-color 0.3s; position: relative; background: #fff; }
         .box.dragging { opacity: 0.5; border: 2px dashed #3498db; }
         .box-header { padding: 15px 20px; background: #fafbfc; cursor: pointer; font-size: 18px; font-weight: bold; position: relative; }
@@ -43,22 +46,46 @@
         .box.active .box-header::after { transform: rotate(180deg); }
         .box-content { display: none; padding: 20px; border-top: 1px solid #ecf0f1; }
         .box.active .box-content { display: block; }
-        .editing .box-header, .editing .box-content { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; }
-        .editing .box-header::after { display: none; }
-        .editing .box-content { display: block; }
         .box-content a { color: #e74c3c; font-weight: bold; text-decoration: underline; cursor: pointer; background: #fdf2f1; padding: 2px 6px; border-radius: 4px; }
 
-        .box-toolbar { background: #e8f4f8; padding: 6px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; }
-        .left-group { display: flex; align-items: center; gap: 10px; }
-        .drag-handle { cursor: grab; font-size: 16px; color: #34495e; font-weight: bold; user-select: none; }
+        /* ===== 編輯模式：預設全部縮埋，單擊標題先展開 =====
+           用 #mainContainer 提升權重，蓋過 .box.active 嗰條規則。
+           .active = 「訪客預設」(會存落雲端)；.edit-open = 我編輯緊嗰陣嘅展開狀態(唔會存)。 */
+        #mainContainer.editing .box-content { display: none; }
+        #mainContainer.editing .box.edit-open .box-content { display: block; }
+        #mainContainer.editing .box-header { cursor: pointer; min-height: 22px; }
+        /* 冇標題嘅區塊喺編輯模式俾個提示（CSS 生成內容，唔會存落雲端） */
+        #mainContainer.editing .box-header:empty::before { content: '（呢個區塊冇標題 —— 雙擊可以加）'; color: #95a5a6; font-weight: normal; font-size: 14px; }
+        #mainContainer.editing .box-header::after { transform: none; }
+        #mainContainer.editing .box.edit-open .box-header::after { transform: rotate(180deg); }
+        /* 只有「解鎖咗」嘅元素先有藍色虛線框，一眼睇到自己改緊邊度 */
+        #mainContainer.editing [contenteditable="true"] { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; }
+        #mainContainer.editing .box.edit-open { border-color: #3498db; }
+
+        .box-toolbar { background: #e8f4f8; padding: 6px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .box-toolbar button { border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; font-weight: bold; color: #fff; }
+        .box-toolbar button:hover { filter: brightness(1.08); }
+        .drag-handle { cursor: grab; font-size: 14px; color: #34495e; font-weight: bold; user-select: none; }
         .drag-handle:active { cursor: grabbing; }
-        
-        /* 預設狀態切換按鈕樣式 */
-        .btn-state { background: #3498db; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-fold { background: #7f8c8d; }
+        .btn-state { background: #3498db; }
         .btn-state.collapsed { background: #95a5a6; } /* 縮埋狀態變灰色 */
-        
-        .btn-delete-box { background: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .btn-cp { background: #16a085; }
+        .btn-pt { background: #2980b9; }
+        .btn-sub { background: #9b59b6; }
+        .btn-save-box { background: #27ae60; }
+        .btn-delete-box { background: #e74c3c; }
         .btn-delete-box:hover { background: #c0392b; }
+
+        /* 最底工具列（只喺編輯模式出現） */
+        #bottomBar { display: none; margin-top: 20px; padding-top: 15px; border-top: 2px dashed #d4eaf2; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        #bottomBar button { border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: bold; color: #fff; cursor: pointer; }
+        #bbAdd { background: #3498db; } #bbSave { background: #27ae60; } #bbFold { background: #7f8c8d; }
+        #bbExpand { background: #7f8c8d; } #bbAllCollapse { background: #95a5a6; } #bbUndo { background: #e67e22; display: none; }
+        #bbTop { background: #34495e; }
+
+        #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
     </style>
 </head>
 <body>
@@ -81,7 +108,7 @@
                 <button id="addBoxBtn" class="btn btn-add">➕ 新增區塊</button>
                 <button id="createLinkBtn" class="btn btn-link" title="反白文字後點擊">🔗 變為子頁面</button>
                 <button id="editBtn" class="btn btn-edit">✏️ 編輯內容</button>
-                <button id="saveBtn" class="btn btn-save">💾 儲存</button>
+                <button id="saveBtn" class="btn btn-save" title="儲存並離開編輯模式">💾 儲存並完成</button>
             </div>
         </div>
         
@@ -89,8 +116,24 @@
             <h1 id="pageMainTitle" style="display:none;"></h1>
         </div>
 
+        <div id="editHint">
+            💡 <b>單擊標題</b> = 展開／收起　·　<b>雙擊標題或內容</b> = 解鎖編輯　·　<b>Ctrl + S</b> = 快速儲存（唔會離開編輯模式）
+        </div>
+
         <div id="cabinetContent">載入中...</div>
+
+        <div id="bottomBar">
+            <button id="bbAdd">➕ 新增區塊</button>
+            <button id="bbSave">💾 儲存</button>
+            <button id="bbFold">▸ 全部收起</button>
+            <button id="bbExpand">▾ 全部展開</button>
+            <button id="bbAllCollapse" title="將所有區塊嘅「訪客預設」一次過設為縮埋">👀 訪客預設全部縮埋</button>
+            <button id="bbUndo">↩️ 還原剛刪除嘅區塊</button>
+            <button id="bbTop">⬆️ 返回頂部</button>
+        </div>
     </div>
+
+    <div id="toast"></div>
 
     <script>
         /* =========================================================
@@ -146,8 +189,15 @@
         const pageMainTitle = document.getElementById('pageMainTitle');
         const mainContainer = document.getElementById('mainContainer');
         const breadcrumbsContainer = document.getElementById('breadcrumbsContainer');
+        const editHint = document.getElementById('editHint');
+        const bottomBar = document.getElementById('bottomBar');
+        const toastEl = document.getElementById('toast');
         
         let isAdmin = false; let isEditing = false;
+        let isDirty = false;          // 有冇未儲存嘅改動
+        let clickTimer = null;        // 分辨單擊 / 雙擊
+        let savedRange = null;        // 記住最後一次反白，撳按鈕後都仲用得
+        let lastDeleted = null;       // 誤刪救援
 
         // 私人頁面加個標記，等自己一眼認得
         if (isPrivate) {
@@ -156,6 +206,22 @@
             badge.innerText = '🔒 私人頁面';
             document.getElementById('navBar').prepend(badge);
         }
+
+        // ---------- 小工具 ----------
+        function toast(msg, isError) {
+            toastEl.innerHTML = msg;
+            toastEl.style.background = isError ? '#c0392b' : '#2c3e50';
+            toastEl.style.display = 'block';
+            clearTimeout(toastEl._t);
+            toastEl._t = setTimeout(() => { toastEl.style.display = 'none'; }, 2600);
+        }
+        function flash(btn, text) {
+            if (!btn) return;
+            const old = btn.innerHTML, oldBg = btn.style.background;
+            btn.innerHTML = text; btn.style.background = '#27ae60';
+            setTimeout(() => { btn.innerHTML = old; btn.style.background = oldBg; }, 1500);
+        }
+        function markDirty() { if (isEditing) isDirty = true; }
 
         function showLockedScreen() {
             pageMainTitle.style.display = "none";
@@ -195,7 +261,6 @@
                 if (!isEditing) {
                     if(snap.exists()) cabinetContent.innerHTML = snap.val();
                     else cabinetContent.innerHTML = `<div class="box active"><div class="box-header">新主題</div><div class="box-content"><p>請切換至 Admin 並編輯內容。</p></div></div>`;
-                    setupAccordion(); setupDragAndDrop();
                 }
             }, err => { if(err.code === 'PERMISSION_DENIED') showLockedScreen(); });
         }
@@ -266,26 +331,69 @@
             }).catch(() => alert("複製失敗，請手動複製網址列。"));
         });
 
-        function setupAccordion() {
-            document.querySelectorAll('.box-header').forEach(header => {
-                const newHeader = header.cloneNode(true);
-                header.parentNode.replaceChild(newHeader, header);
-                newHeader.addEventListener('click', function() {
-                    if(isEditing) return; 
-                    this.parentElement.classList.toggle('active');
-                });
-            });
+        /* ===================================================================
+           展開／收起（事件委派）
+           用 delegation 而唔係逐個 header 掛 listener：內容係由雲端 innerHTML
+           塞落嚟嘅，隨時整個換過，掛喺個別節點嘅 listener 會失效。
+           - 訪客模式：單擊標題 = 開合（同以前一樣）
+           - 編輯模式：單擊 = 展開／收起；雙擊 = 解鎖嗰格嚟編輯
+           =================================================================== */
+        function setBoxOpen(box, open) {
+            box.classList.toggle('edit-open', open);
+            if (!open) lockBox(box);
+            const fb = box.querySelector('.btn-fold');
+            if (fb) fb.innerHTML = open ? '▾ 收起' : '▸ 展開';
+        }
+        function lockBox(box) {
+            box.querySelectorAll('[contenteditable="true"]').forEach(el => el.setAttribute('contenteditable', 'false'));
+        }
+        function unlockElement(el) {
+            el.setAttribute('contenteditable', 'true');
+            el.focus();
         }
 
-        function setupDragAndDrop() {
-            cabinetContent.addEventListener('dragover', e => {
-                e.preventDefault(); const draggingBox = document.querySelector('.dragging');
-                if(!draggingBox) return;
-                const afterElement = getDragAfterElement(cabinetContent, e.clientY);
-                if (afterElement == null) cabinetContent.appendChild(draggingBox); else cabinetContent.insertBefore(draggingBox, afterElement);
-            });
-        }
+        cabinetContent.addEventListener('click', e => {
+            if (e.target.closest('.box-toolbar')) return;      // 工具列自己有 onclick
+            if (e.target.closest('a')) return;                 // 唔好阻住連結
+            const header = e.target.closest('.box-header');
+            if (!header) return;
+            const box = header.closest('.box');
+            if (!box) return;
 
+            if (!isEditing) { box.classList.toggle('active'); return; }   // 訪客／唯讀模式：原本行為
+            if (header.getAttribute('contenteditable') === 'true') return; // 解鎖咗就係打字，唔好摺埋
+
+            clearTimeout(clickTimer);
+            clickTimer = setTimeout(() => setBoxOpen(box, !box.classList.contains('edit-open')), 220);
+        });
+
+        cabinetContent.addEventListener('dblclick', e => {
+            if (!isEditing) return;
+            if (e.target.closest('.box-toolbar')) return;
+            const el = e.target.closest('.box-header, .box-content');
+            if (!el) return;
+            clearTimeout(clickTimer);                 // 取消單擊嗰下開合
+            const box = el.closest('.box');
+            setBoxOpen(box, true);
+            unlockElement(el);
+        });
+
+        // 記住最後一次有效嘅反白：撳工具列按鈕會失焦，冇呢個就會「搵唔到選取文字」
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+            const node = sel.anchorNode;
+            const el = node && (node.nodeType === 1 ? node : node.parentElement);
+            if (el && el.closest && el.closest('[contenteditable="true"]')) savedRange = sel.getRangeAt(0).cloneRange();
+        });
+
+        // ---------- 拖曳排序（只掛一次，避免重複疊加）----------
+        cabinetContent.addEventListener('dragover', e => {
+            e.preventDefault(); const draggingBox = document.querySelector('.dragging');
+            if(!draggingBox) return;
+            const afterElement = getDragAfterElement(cabinetContent, e.clientY);
+            if (afterElement == null) cabinetContent.appendChild(draggingBox); else cabinetContent.insertBefore(draggingBox, afterElement);
+        });
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.querySelectorAll('.box:not(.dragging)')];
             return draggableElements.reduce((closest, child) => {
@@ -294,85 +402,119 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         }
 
-        // --- 工具列：狀態切換按鈕 ---
-        function addToolbarToBox(box) {
-            if (!box.querySelector('.box-toolbar')) {
-                const toolbar = document.createElement('div'); toolbar.className = 'box-toolbar'; toolbar.setAttribute('contenteditable', 'false');
-                
-                const leftGroup = document.createElement('div');
-                leftGroup.className = 'left-group';
+        /* ===================================================================
+           複製 / 貼上
+           =================================================================== */
+        // 注意：區塊收埋咗嗰陣 innerText 會係空（隱藏元素冇 rendered text），
+        // 所以要有 fallback，先至可以「唔使展開都複製到」。
+        function plainTextOf(el) {
+            const t = (el.innerText || '').trim();
+            if (t) return t;
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+            clone.querySelectorAll('p,div,li,h1,h2,h3,h4,tr,blockquote').forEach(b => b.append('\n'));
+            return (clone.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+        }
 
-                const dragHandle = document.createElement('span'); dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
-                dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
-                dragHandle.addEventListener('mouseup', () => box.setAttribute('draggable', 'false'));
-                dragHandle.addEventListener('mouseleave', () => box.setAttribute('draggable', 'false'));
-
-                const stateBtn = document.createElement('button');
-                stateBtn.className = 'btn-state';
-                
-                if (box.classList.contains('active')) {
-                    stateBtn.innerHTML = '👀 訪客預設：展開';
+        async function copyElement(el, btn) {
+            const html = el.innerHTML;
+            const text = plainTextOf(el);
+            try {
+                if (navigator.clipboard && window.ClipboardItem) {
+                    // 同時放 HTML 同純文字：貼返入區塊會保留格式，貼去記事本就係純文字
+                    await navigator.clipboard.write([new ClipboardItem({
+                        'text/html': new Blob([html], { type: 'text/html' }),
+                        'text/plain': new Blob([text], { type: 'text/plain' })
+                    })]);
                 } else {
-                    stateBtn.innerHTML = '👀 訪客預設：縮埋';
-                    stateBtn.classList.add('collapsed');
+                    await navigator.clipboard.writeText(text);
                 }
-                
-                stateBtn.onclick = function() {
-                    if (box.classList.contains('active')) {
-                        box.classList.remove('active');
-                        stateBtn.innerHTML = '👀 訪客預設：縮埋';
-                        stateBtn.classList.add('collapsed');
-                    } else {
-                        box.classList.add('active');
-                        stateBtn.innerHTML = '👀 訪客預設：展開';
-                        stateBtn.classList.remove('collapsed');
-                    }
-                };
-
-                box.addEventListener('dragstart', () => box.classList.add('dragging'));
-                box.addEventListener('dragend', () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); });
-
-                const delBtn = document.createElement('button'); delBtn.className = 'btn-delete-box'; delBtn.innerHTML = '🗑️ 刪除';
-                delBtn.onclick = function() { if(confirm('確定要刪除？')) box.remove(); };
-                
-                leftGroup.appendChild(dragHandle);
-                leftGroup.appendChild(stateBtn);
-                
-                toolbar.appendChild(leftGroup); 
-                toolbar.appendChild(delBtn); 
-                box.insertBefore(toolbar, box.firstChild);
+                flash(btn, '✅ 已複製'); toast('✅ 已複製到剪貼簿');
+            } catch (err) {
+                try { await navigator.clipboard.writeText(text); flash(btn, '✅ 已複製'); toast('✅ 已複製（純文字）'); }
+                catch (e2) { toast('❌ 複製失敗：瀏覽器唔俾權限（要 https）', true); }
             }
         }
 
-        editBtn.addEventListener('click', () => {
-            isEditing = true;
-            editBtn.style.display = "none"; saveBtn.style.display = "inline-block";
-            createLinkBtn.style.display = "inline-block"; addBoxBtn.style.display = "inline-block";
-            mainContainer.classList.add('editing');
+        async function readClipboard() {
+            try {
+                if (navigator.clipboard && navigator.clipboard.read) {
+                    const items = await navigator.clipboard.read();
+                    let html = null, text = null;
+                    for (const item of items) {
+                        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+                        if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+                    }
+                    if (html || text) return { html, text };
+                }
+            } catch (e) { /* 跌落去用 readText */ }
+            try { const t = await navigator.clipboard.readText(); return { html: null, text: t }; } catch (e) { return null; }
+        }
 
-            pageMainTitle.style.display = "inline-block";
-            if (pageMainTitle.innerText.trim() === "") pageMainTitle.innerHTML = "請輸入文章總標題";
-            pageMainTitle.setAttribute('contenteditable', 'true');
-
-            document.querySelectorAll('.box-header, .box-content').forEach(el => {
-                el.setAttribute('contenteditable', 'true');
-                if(el.classList.contains('box-header')) el.style.display = "block";
+        // 貼上嘅嘢會存落雲端再render俾人睇，所以一定要清乾淨先
+        function sanitizeHTML(html) {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.body.querySelectorAll('script,style,iframe,object,embed,link,meta,noscript,.box-toolbar').forEach(n => n.remove());
+            doc.body.querySelectorAll('*').forEach(el => {
+                [...el.attributes].forEach(attr => {
+                    const n = attr.name.toLowerCase();
+                    if (n.startsWith('on') || n === 'contenteditable' || n === 'draggable') el.removeAttribute(attr.name);
+                    if ((n === 'href' || n === 'src') && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
+                });
             });
-            document.querySelectorAll('.box').forEach(box => addToolbarToBox(box));
-        });
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+            const comments = []; while (walker.nextNode()) comments.push(walker.currentNode);
+            comments.forEach(c => c.remove());
+            return doc.body.innerHTML;
+        }
 
-        addBoxBtn.addEventListener('click', () => {
-            const newBox = document.createElement('div'); newBox.className = 'box active';
-            newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
-            cabinetContent.appendChild(newBox); addToolbarToBox(newBox);
-            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        });
+        function escapeHTML(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-        createLinkBtn.addEventListener('click', async () => {
-            const selection = window.getSelection();
-            if (!selection.rangeCount || selection.toString().trim() === '') return alert('請先反白選取文字！');
-            const range = selection.getRangeAt(0);
-            
+        async function pasteInto(el, opts) {
+            const data = await readClipboard();
+            if (!data) { toast('❌ 讀唔到剪貼簿，請雙擊入去用 Ctrl+V', true); return; }
+            let incoming = (opts.plainOnly || !data.html)
+                ? escapeHTML((data.text || '').trim()).replace(/\n/g, opts.plainOnly ? ' ' : '<br>')
+                : sanitizeHTML(data.html);
+            if (!incoming.trim()) { toast('剪貼簿係空嘅', true); return; }
+
+            const existing = el.textContent.trim();
+            if (existing !== '') {
+                const overwrite = confirm(`「${opts.label}」已經有嘢喺度。\n\n按【確定】= 覆蓋\n按【取消】= 貼喺現有內容後面`);
+                if (overwrite) el.innerHTML = incoming; else el.innerHTML = el.innerHTML + (opts.plainOnly ? ' ' : '') + incoming;
+            } else {
+                el.innerHTML = incoming;
+            }
+            markDirty();
+            toast('✅ 已貼上（記得撳 💾 儲存）');
+        }
+
+        /* ===================================================================
+           變為子頁面（全域按鈕 + 每個區塊嘅按鈕共用同一段邏輯）
+           =================================================================== */
+        function getUsableRange(scopeBox) {
+            let range = null;
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount && !sel.isCollapsed) range = sel.getRangeAt(0);
+            else if (savedRange && savedRange.commonAncestorContainer.isConnected) range = savedRange;
+            if (!range || range.collapsed) return null;
+            const node = range.commonAncestorContainer;
+            const el = node.nodeType === 1 ? node : node.parentElement;
+            if (!el || !el.closest('[contenteditable="true"]')) return null;
+            if (scopeBox && !scopeBox.contains(el)) return null;
+            return range;
+        }
+
+        async function createSubPageFromSelection(scopeBox) {
+            const range = getUsableRange(scopeBox);
+            if (!range) {
+                alert(scopeBox
+                    ? '請先喺呢個區塊入面「雙擊解鎖」，反白選取文字，再撳「變為子頁面」。'
+                    : '請先反白選取文字！（要先雙擊解鎖嗰格）');
+                return;
+            }
+            const selectedText = range.toString().trim();
+
             async function getValidId() {
                 let customId = prompt((isPrivate ? "【🔒 私人區】" : "") + "請設定專屬 ID (例如：ai-part2)。\n留空將自動生成帶有 Prefix 嘅 ID：", "");
                 if (customId === null) return null;
@@ -393,46 +535,268 @@
 
             // 私人頁嘅子頁面自動跟埋入私人區（private_page_parents），確保成條 chain 都受保護
             db.ref(P_PARENTS + '/' + finalId).set(pageId);
+            if (selectedText !== "") db.ref(P_TITLES + '/' + finalId).set(selectedText);
 
-            const selectedText = selection.toString().trim();
-            if(selectedText !== "") db.ref(P_TITLES + '/' + finalId).set(selectedText);
-
-            selection.removeAllRanges(); selection.addRange(range);
+            const container = range.commonAncestorContainer;
+            const editable = (container.nodeType === 1 ? container : container.parentElement).closest('[contenteditable="true"]');
+            if (editable) editable.focus();
+            const sel = window.getSelection();
+            sel.removeAllRanges(); sel.addRange(range);
             document.execCommand('createLink', false, pageLink(finalId));
-            alert(`成功！連結已指向 ID: ${finalId}` + (isPrivate ? '（私人區）' : ''));
-        });
+            markDirty();
+            alert(`成功！連結已指向 ID: ${finalId}` + (isPrivate ? '（私人區）' : '') + '\n記得撳 💾 儲存。');
+        }
 
-        saveBtn.addEventListener('click', () => {
-            disableEditing();
-            document.querySelectorAll('.box').forEach(box => {
+        /* ===================================================================
+           區塊工具列
+           =================================================================== */
+        function mkBtn(cls, html, title, onclick) {
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = cls; b.innerHTML = html;
+            if (title) b.title = title;
+            b.onclick = onclick;
+            return b;
+        }
+
+        function addToolbarToBox(box) {
+            if (box.querySelector(':scope > .box-toolbar')) return;
+
+            const header  = box.querySelector('.box-header');
+            const content = box.querySelector('.box-content');
+
+            const toolbar = document.createElement('div');
+            toolbar.className = 'box-toolbar';
+            toolbar.setAttribute('contenteditable', 'false');
+
+            // --- 左邊：移動、收起／展開、訪客預設 ---
+            const left = document.createElement('div'); left.className = 'tb-group';
+
+            const dragHandle = document.createElement('span');
+            dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
+            dragHandle.title = '按住嚟拖曳排序';
+            dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
+            dragHandle.addEventListener('mouseup', () => box.setAttribute('draggable', 'false'));
+            dragHandle.addEventListener('mouseleave', () => box.setAttribute('draggable', 'false'));
+
+            const foldBtn = mkBtn('btn-fold', box.classList.contains('edit-open') ? '▾ 收起' : '▸ 展開',
+                '喺編輯模式收起／展開呢個區塊（唔影響訪客）',
+                () => setBoxOpen(box, !box.classList.contains('edit-open')));
+
+            // 訪客預設：呢個係會存落雲端嘅 .active class
+            const stateBtn = mkBtn('btn-state', '', '訪客打開頁面時，呢個區塊係展開定縮埋', null);
+            function syncState() {
+                if (box.classList.contains('active')) { stateBtn.innerHTML = '👀 訪客預設：展開'; stateBtn.classList.remove('collapsed'); }
+                else { stateBtn.innerHTML = '👀 訪客預設：縮埋'; stateBtn.classList.add('collapsed'); }
+            }
+            stateBtn.onclick = () => { box.classList.toggle('active'); syncState(); markDirty(); };
+            syncState();
+
+            left.appendChild(dragHandle); left.appendChild(foldBtn); left.appendChild(stateBtn);
+
+            // --- 中間：複製 / 貼上 ---
+            const mid = document.createElement('div'); mid.className = 'tb-group';
+            mid.appendChild(mkBtn('btn-cp', '📋 複製標題', '複製呢個區塊嘅標題文字', function () { copyElement(header, this); }));
+            mid.appendChild(mkBtn('btn-pt', '📥 貼上標題', '用剪貼簿內容取代／接落標題', () => pasteInto(header, { label: '標題', plainOnly: true })));
+            mid.appendChild(mkBtn('btn-cp', '📋 複製內容', '複製呢個區塊嘅內容（連格式）', function () { copyElement(content, this); }));
+            mid.appendChild(mkBtn('btn-pt', '📥 貼上內容', '用剪貼簿內容取代／接落內容', () => { setBoxOpen(box, true); pasteInto(content, { label: '內容' }); }));
+
+            // --- 右邊：變為子頁面、儲存、刪除 ---
+            const right = document.createElement('div'); right.className = 'tb-group';
+            right.appendChild(mkBtn('btn-sub', '🔗 變為子頁面', '喺呢個區塊反白文字後撳，將佢變成子頁面連結',
+                () => createSubPageFromSelection(box)));
+            right.appendChild(mkBtn('btn-save-box', '💾 儲存', '即刻儲存成頁（唔會離開編輯模式）', function () { quickSave(this); }));
+            right.appendChild(mkBtn('btn-delete-box', '🗑️ 刪除', '刪除呢個區塊（可以喺最底還原）', () => {
+                if (!confirm('確定要刪除呢個區塊？\n（未儲存之前，可以喺最底撳「還原剛刪除嘅區塊」救返）')) return;
+                lastDeleted = { node: box, parent: box.parentNode, next: box.nextElementSibling };
+                box.remove(); markDirty(); refreshUndoBtn();
+                toast('🗑️ 已刪除，可喺最底還原');
+            }));
+
+            box.ondragstart = () => box.classList.add('dragging');
+            box.ondragend = () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); markDirty(); };
+
+            toolbar.appendChild(left); toolbar.appendChild(mid); toolbar.appendChild(right);
+            box.insertBefore(toolbar, box.firstChild);
+        }
+
+        function refreshUndoBtn() {
+            document.getElementById('bbUndo').style.display = lastDeleted ? 'inline-block' : 'none';
+        }
+
+        /* ===================================================================
+           儲存：先整一份「乾淨」嘅 HTML（拆走工具列、contenteditable 等），
+           所以就算唔離開編輯模式都可以隨時儲存。
+           =================================================================== */
+        function getCleanContentHTML() {
+            const clone = cabinetContent.cloneNode(true);
+            clone.querySelectorAll('.box-toolbar').forEach(t => t.remove());
+            clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
+            clone.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
+            clone.querySelectorAll('.box').forEach(box => {
+                box.classList.remove('dragging', 'edit-open');
                 const header = box.querySelector('.box-header');
-                if(header.innerText.trim() === "") { header.style.display = "none"; box.classList.add('active'); } 
-                else { header.style.display = "block"; }
+                if (!header) return;
+                if (header.textContent.trim() === '') {
+                    // 冇標題就一定要展開，否則訪客乜都撳唔到
+                    header.style.display = 'none';
+                    box.classList.add('active');
+                } else {
+                    header.style.display = '';
+                    if (!header.getAttribute('style')) header.removeAttribute('style');
+                }
             });
-            
-            const titleText = pageMainTitle.innerText.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
-            db.ref(P_TITLES + '/' + pageId).set(titleText);
-            db.ref(P_PAGES + '/' + pageId).set(cabinetContent.innerHTML).then(() => {
-                alert("內容已成功儲存至雲端！" + (isPrivate ? "（私人區）" : ""));
-                buildBreadcrumbs(pageId); 
-            }).catch(err => alert("儲存失敗: " + err.message));
-            setupAccordion();
+            return clone.innerHTML;
+        }
+
+        function getCleanTitle() {
+            return pageMainTitle.textContent.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
+        }
+
+        function quickSave(btn) {
+            const titleText = getCleanTitle();
+            const contentHTML = getCleanContentHTML();
+            return Promise.all([
+                db.ref(P_TITLES + '/' + pageId).set(titleText),
+                db.ref(P_PAGES + '/' + pageId).set(contentHTML)
+            ]).then(() => {
+                isDirty = false;
+                flash(btn, '✅ 已儲存');
+                toast('✅ 已儲存至雲端' + (isPrivate ? '（私人區）' : ''));
+                buildBreadcrumbs(pageId);
+            }).catch(err => { toast('❌ 儲存失敗：' + err.message, true); alert("儲存失敗: " + err.message); });
+        }
+
+        /* ===================================================================
+           進入 / 離開編輯模式
+           =================================================================== */
+        editBtn.addEventListener('click', () => {
+            isEditing = true;
+            editBtn.style.display = "none"; saveBtn.style.display = "inline-block";
+            createLinkBtn.style.display = "inline-block"; addBoxBtn.style.display = "inline-block";
+            mainContainer.classList.add('editing');
+            editHint.style.display = "block";
+            bottomBar.style.display = "flex";
+
+            pageMainTitle.style.display = "inline-block";
+            if (pageMainTitle.textContent.trim() === "") pageMainTitle.innerHTML = "請輸入文章總標題";
+            pageMainTitle.setAttribute('contenteditable', 'true');
+
+            // 一入嚟全部縮埋，淨係見到標題；亦唔會自動解鎖（要雙擊）
+            document.querySelectorAll('#cabinetContent .box').forEach(box => {
+                const header = box.querySelector('.box-header');
+                if (header) header.style.display = "block";   // 冇標題嗰啲都要見到先撳到
+                box.classList.remove('edit-open');
+                addToolbarToBox(box);
+            });
+            refreshUndoBtn();
+            toast('✏️ 編輯模式：單擊標題展開，雙擊解鎖編輯');
         });
 
         function disableEditing() {
-            isEditing = false; mainContainer.classList.remove('editing');
+            isEditing = false; isDirty = false;
+            mainContainer.classList.remove('editing');
             createLinkBtn.style.display = "none"; addBoxBtn.style.display = "none";
+            editHint.style.display = "none"; bottomBar.style.display = "none";
             document.querySelectorAll('.box-toolbar').forEach(t => t.remove());
-            
+            lastDeleted = null;
+
             pageMainTitle.setAttribute('contenteditable', 'false');
-            if (pageMainTitle.innerText.trim() === "" || pageMainTitle.innerText.trim() === "請輸入文章總標題") {
+            if (pageMainTitle.textContent.trim() === "" || pageMainTitle.textContent.trim() === "請輸入文章總標題") {
                 pageMainTitle.style.display = "none";
             }
 
-            document.querySelectorAll('.box-header, .box-content').forEach(el => el.setAttribute('contenteditable', 'false'));
+            document.querySelectorAll('#cabinetContent [contenteditable]').forEach(el => el.setAttribute('contenteditable', 'false'));
+            document.querySelectorAll('#cabinetContent .box').forEach(box => {
+                box.classList.remove('edit-open', 'dragging');
+                box.removeAttribute('draggable');
+                const header = box.querySelector('.box-header');
+                if (!header) return;
+                if (header.textContent.trim() === '') { header.style.display = 'none'; box.classList.add('active'); }
+                else header.style.display = '';
+            });
+
             if (isAdmin) editBtn.style.display = "inline-block";
             saveBtn.style.display = "none";
         }
+
+        // 頂部：儲存並離開編輯模式（同以前一樣嘅流程）
+        saveBtn.addEventListener('click', () => {
+            const titleText = getCleanTitle();
+            const contentHTML = getCleanContentHTML();
+            disableEditing();
+            db.ref(P_TITLES + '/' + pageId).set(titleText);
+            db.ref(P_PAGES + '/' + pageId).set(contentHTML).then(() => {
+                toast("✅ 內容已儲存至雲端" + (isPrivate ? "（私人區）" : ""));
+                buildBreadcrumbs(pageId); 
+            }).catch(err => alert("儲存失敗: " + err.message));
+        });
+
+        /* ===================================================================
+           新增區塊（頂部同底部共用）
+           =================================================================== */
+        function addBox() {
+            // 新區塊嘅「訪客預設」= 縮埋（冇 active class）；要展開就自己撳個 👀 掣
+            const newBox = document.createElement('div');
+            newBox.className = 'box edit-open';
+            newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
+            cabinetContent.appendChild(newBox);
+            addToolbarToBox(newBox);
+            markDirty();
+            newBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const h = newBox.querySelector('.box-header');
+            setTimeout(() => h.focus(), 300);
+        }
+        addBoxBtn.addEventListener('click', addBox);
+        document.getElementById('bbAdd').addEventListener('click', addBox);
+
+        createLinkBtn.addEventListener('click', () => createSubPageFromSelection(null));
+
+        /* ===================================================================
+           最底工具列
+           =================================================================== */
+        document.getElementById('bbSave').addEventListener('click', function () { quickSave(this); });
+        document.getElementById('bbFold').addEventListener('click', () => {
+            document.querySelectorAll('#cabinetContent .box').forEach(b => setBoxOpen(b, false));
+        });
+        document.getElementById('bbExpand').addEventListener('click', () => {
+            document.querySelectorAll('#cabinetContent .box').forEach(b => setBoxOpen(b, true));
+        });
+        document.getElementById('bbAllCollapse').addEventListener('click', () => {
+            if (!confirm('將所有區塊嘅「訪客預設」一次過設為縮埋？\n（之後仲可以逐個撳返展開）')) return;
+            document.querySelectorAll('#cabinetContent .box').forEach(b => {
+                const header = b.querySelector('.box-header');
+                if (header && header.textContent.trim() === '') return; // 冇標題嘅一定要留返展開
+                b.classList.remove('active');
+                const sb = b.querySelector('.btn-state');
+                if (sb) { sb.innerHTML = '👀 訪客預設：縮埋'; sb.classList.add('collapsed'); }
+            });
+            markDirty(); toast('已全部設為「訪客預設：縮埋」');
+        });
+        document.getElementById('bbUndo').addEventListener('click', () => {
+            if (!lastDeleted) return;
+            const { node, parent, next } = lastDeleted;
+            if (next && next.isConnected) parent.insertBefore(node, next); else parent.appendChild(node);
+            addToolbarToBox(node);
+            lastDeleted = null; refreshUndoBtn(); markDirty();
+            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            toast('↩️ 已還原');
+        });
+        document.getElementById('bbTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+        /* ===================================================================
+           安全網：Ctrl+S 快速儲存、改咗嘢未儲存就離開會有警告
+           =================================================================== */
+        document.addEventListener('input', () => markDirty(), true);
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                if (!isEditing) return;
+                e.preventDefault();
+                quickSave(document.getElementById('bbSave'));
+            }
+        });
+        window.addEventListener('beforeunload', e => {
+            if (isEditing && isDirty) { e.preventDefault(); e.returnValue = ''; }
+        });
     </script>
 </body>
 </html>
