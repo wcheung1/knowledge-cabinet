@@ -65,21 +65,32 @@
         .box-toolbar { background: #e8f4f8; padding: 5px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; flex-wrap: wrap; gap: 6px; }
         .tb-group { display: flex; align-items: center; gap: 5px; }
 
-        /* ===== 淨係得 icon 嘅按鈕；文字要 mouse 移上去先浮出嚟 ===== */
+        /* ===== 淨係得 icon 嘅按鈕；文字要 mouse 移上去先浮出嚟 =====
+           ⚠ 千祈唔好喺 :hover 度用 filter / opacity / transform：
+           呢啲屬性會即場整出一個新嘅 stacking context，令下面浮出嚟嗰個
+           提示（::after）被困喺粒掣入面，反而俾後面嘅 .box-header 蓋住。
+           症狀就係「mouse 入去見唔到、移開嗰陣反而閃一閃」。
+           所以變光用 inset box-shadow（唔會做 stacking context）。 */
         .icon-btn { position: relative; border: none; border-radius: 4px; padding: 3px 7px; font-size: 14px; line-height: 1.25; cursor: pointer; color: #fff; background: #7f8c8d; }
-        .icon-btn:hover { filter: brightness(1.12); }
+        .icon-btn:hover { box-shadow: inset 0 0 0 2em rgba(255,255,255,0.18); }
         .icon-btn::after {
-            content: attr(data-label); position: absolute; top: 132%; left: 0;
-            background: #2c3e50; color: #fff; padding: 4px 8px; border-radius: 4px;
+            content: attr(data-label); display: none;      /* 用 display 開關：即開即收，冇淡入淡出嘅殘影 */
+            position: absolute; top: calc(100% + 6px); left: 0;
+            background: #2c3e50; color: #fff; padding: 5px 9px; border-radius: 4px;
             font-size: 11px; font-weight: normal; white-space: nowrap; letter-spacing: 0.5px;
-            opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 60;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            pointer-events: none; z-index: 60;             /* pointer-events:none = 個提示唔會搶走 hover */
         }
-        .icon-btn:hover::after { opacity: 1; }
+        .icon-btn:hover::after { display: block; }
         .icon-btn.tip-r::after { left: auto; right: 0; }   /* 右邊嘅掣，提示向左伸，唔會俾方塊界走 */
+        /* 編輯模式解除 .box 嘅 overflow:hidden，等提示唔會俾方塊邊界切走 */
+        #mainContainer.editing .box { overflow: visible; }
+        #mainContainer.editing .box-toolbar { border-radius: 6px 6px 0 0; }
 
         /* 最頂嘅復原 / 重做：同上面一行掣一樣高，冇嘢可以復原嗰陣會變灰 */
         .btn-hist { display: none; background: #34495e; color: #fff; padding: 7px 11px; font-size: 15px; }
-        .btn-hist:disabled { opacity: 0.32; cursor: not-allowed; filter: none; }
+        /* 用 grayscale + 淺灰底嚟表示「撳唔到」，唔用 opacity —— opacity 會令個提示文字一齊變透明睇唔清 */
+        .btn-hist:disabled { background: #95a5a6; filter: grayscale(1); cursor: not-allowed; box-shadow: none; }
 
         .drag-handle { cursor: grab; background: #34495e; user-select: none; }
         .drag-handle:active { cursor: grabbing; }
