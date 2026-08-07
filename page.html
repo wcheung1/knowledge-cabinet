@@ -62,27 +62,51 @@
         #mainContainer.editing [contenteditable="true"] { border: 2px dashed #3498db; background-color: #f9fcff; outline: none; cursor: text; }
         #mainContainer.editing .box.edit-open { border-color: #3498db; }
 
-        .box-toolbar { background: #e8f4f8; padding: 6px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; flex-wrap: wrap; gap: 6px; }
-        .tb-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .box-toolbar button { border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; font-weight: bold; color: #fff; }
-        .box-toolbar button:hover { filter: brightness(1.08); }
-        .drag-handle { cursor: grab; font-size: 14px; color: #34495e; font-weight: bold; user-select: none; }
+        .box-toolbar { background: #e8f4f8; padding: 5px 10px; display: flex; justify-content: space-between; border-bottom: 1px solid #d4eaf2; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .tb-group { display: flex; align-items: center; gap: 5px; }
+
+        /* ===== 淨係得 icon 嘅按鈕；文字要 mouse 移上去先浮出嚟 ===== */
+        .icon-btn { position: relative; border: none; border-radius: 4px; padding: 3px 7px; font-size: 14px; line-height: 1.25; cursor: pointer; color: #fff; background: #7f8c8d; }
+        .icon-btn:hover { filter: brightness(1.12); }
+        .icon-btn::after {
+            content: attr(data-label); position: absolute; top: 132%; left: 0;
+            background: #2c3e50; color: #fff; padding: 4px 8px; border-radius: 4px;
+            font-size: 11px; font-weight: normal; white-space: nowrap; letter-spacing: 0.5px;
+            opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 60;
+        }
+        .icon-btn:hover::after { opacity: 1; }
+        .icon-btn.tip-r::after { left: auto; right: 0; }   /* 右邊嘅掣，提示向左伸，唔會俾方塊界走 */
+
+        /* 最頂嘅復原 / 重做：同上面一行掣一樣高，冇嘢可以復原嗰陣會變灰 */
+        .btn-hist { display: none; background: #34495e; color: #fff; padding: 7px 11px; font-size: 15px; }
+        .btn-hist:disabled { opacity: 0.32; cursor: not-allowed; filter: none; }
+
+        .drag-handle { cursor: grab; background: #34495e; user-select: none; }
         .drag-handle:active { cursor: grabbing; }
         .btn-fold { background: #7f8c8d; }
         .btn-state { background: #3498db; }
-        .btn-state.collapsed { background: #95a5a6; } /* 縮埋狀態變灰色 */
-        .btn-cp { background: #16a085; }
-        .btn-pt { background: #2980b9; }
+        .btn-state.collapsed { background: #95a5a6; } /* 訪客預設縮埋 = 灰色 */
         .btn-sub { background: #9b59b6; }
         .btn-save-box { background: #27ae60; }
         .btn-delete-box { background: #e74c3c; }
         .btn-delete-box:hover { background: #c0392b; }
 
+        /* ===== 浮喺標題／內容右上角嘅複製・貼上掣 =====
+           用「高度 0 嘅佔位 div」放喺 header / content 前面：
+           佢喺文檔流上面啱啱好對正嗰格嘅頂部，但唔會佔高度、亦唔會塞入
+           contenteditable 入面（塞入去嘅話會俾 Ctrl+A 一次過選走同存落雲端）。 */
+        .el-tools { position: relative; height: 0; text-align: right; z-index: 6; display: none; }
+        #mainContainer.editing .title-tools { display: block; top: 11px; padding-right: 44px; } /* 44px = 讓開右邊個 ▼ 箭嘴 */
+        #mainContainer.editing .box.edit-open .content-tools { display: block; top: 9px; padding-right: 12px; }
+        #mainContainer.editing .box.edit-open .box-content { padding-top: 38px; } /* 留位俾右上角嗰兩粒掣 */
+        .el-tools .icon-btn { background: rgba(255,255,255,0.92); color: #2c3e50; border: 1px solid #cbd6dd; margin-left: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .el-tools .icon-btn:hover { background: #eaf6ff; border-color: #3498db; }
+
         /* 最底工具列（只喺編輯模式出現） */
         #bottomBar { display: none; margin-top: 20px; padding-top: 15px; border-top: 2px dashed #d4eaf2; gap: 8px; flex-wrap: wrap; justify-content: center; }
         #bottomBar button { border: none; border-radius: 6px; padding: 8px 14px; font-size: 13px; font-weight: bold; color: #fff; cursor: pointer; }
         #bbAdd { background: #3498db; } #bbSave { background: #27ae60; } #bbFold { background: #7f8c8d; }
-        #bbExpand { background: #7f8c8d; } #bbAllCollapse { background: #95a5a6; } #bbUndo { background: #e67e22; display: none; }
+        #bbExpand { background: #7f8c8d; } #bbAllCollapse { background: #95a5a6; }
         #bbTop { background: #34495e; }
 
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
@@ -105,6 +129,8 @@
                 <span id="statusMessage" style="margin-left:10px;">閱讀者 (唯讀)</span>
             </div>
             <div>
+                <button id="undoBtn" class="btn btn-hist icon-btn" data-label="復原 (Ctrl+Z)" aria-label="復原">↩️</button>
+                <button id="redoBtn" class="btn btn-hist icon-btn" data-label="重做 (Ctrl+Y)" aria-label="重做">↪️</button>
                 <button id="addBoxBtn" class="btn btn-add">➕ 新增區塊</button>
                 <button id="createLinkBtn" class="btn btn-link" title="反白文字後點擊">🔗 變為子頁面</button>
                 <button id="editBtn" class="btn btn-edit">✏️ 編輯內容</button>
@@ -117,7 +143,7 @@
         </div>
 
         <div id="editHint">
-            💡 <b>單擊標題</b> = 展開／收起　·　<b>雙擊標題或內容</b> = 解鎖編輯　·　<b>Ctrl + S</b> = 快速儲存（唔會離開編輯模式）
+            💡 <b>單擊標題</b> = 展開／收起　·　<b>雙擊標題或內容</b> = 解鎖編輯　·　打完字撳去<b>方塊以外</b>會自動儲存　·　<b>Ctrl + S</b> = 即時儲存　·　<b>Ctrl + Z / Ctrl + Y</b> = 復原／重做　·　mouse 指住個 icon 就會話你知係乜掣
         </div>
 
         <div id="cabinetContent">載入中...</div>
@@ -128,7 +154,6 @@
             <button id="bbFold">▸ 全部收起</button>
             <button id="bbExpand">▾ 全部展開</button>
             <button id="bbAllCollapse" title="將所有區塊嘅「訪客預設」一次過設為縮埋">👀 訪客預設全部縮埋</button>
-            <button id="bbUndo">↩️ 還原剛刪除嘅區塊</button>
             <button id="bbTop">⬆️ 返回頂部</button>
         </div>
     </div>
@@ -197,7 +222,6 @@
         let isDirty = false;          // 有冇未儲存嘅改動
         let clickTimer = null;        // 分辨單擊 / 雙擊
         let savedRange = null;        // 記住最後一次反白，撳按鈕後都仲用得
-        let lastDeleted = null;       // 誤刪救援
 
         // 私人頁面加個標記，等自己一眼認得
         if (isPrivate) {
@@ -342,7 +366,11 @@
             box.classList.toggle('edit-open', open);
             if (!open) lockBox(box);
             const fb = box.querySelector('.btn-fold');
-            if (fb) fb.innerHTML = open ? '▾ 收起' : '▸ 展開';
+            if (fb) {
+                fb.innerHTML = open ? '▾' : '▸';
+                fb.setAttribute('data-label', open ? '收起呢個區塊' : '展開呢個區塊');
+                fb.setAttribute('aria-label', fb.getAttribute('data-label'));
+            }
         }
         function lockBox(box) {
             box.querySelectorAll('[contenteditable="true"]').forEach(el => el.setAttribute('contenteditable', 'false'));
@@ -376,6 +404,121 @@
             const box = el.closest('.box');
             setBoxOpen(box, true);
             unlockElement(el);
+        });
+
+        /* ===================================================================
+           復原 / 重做（Ctrl+Z / Ctrl+Y）
+           思路：唔靠瀏覽器內建嗰個 undo —— 佢淨係記得單一格入面嘅打字，
+           而且我哋一鎖返 contenteditable 佢就會清空。呢度改為記低成頁嘅
+           「狀態快照」，所以連新增／刪除區塊、拖曳排序、貼上、變子頁面、
+           訪客預設，全部都復原得返。
+           granularity：打字係一「段」（停手 0.7 秒 = 一步），其他動作即刻一步。
+           =================================================================== */
+        let history = [], hIndex = -1, typingTimer = null, applyingHistory = false;
+        const HISTORY_MAX = 60;
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
+
+        function snapshot() {
+            return {
+                content: getCleanContentHTML(),
+                title: pageMainTitle.innerHTML,
+                // 邊個區塊喺編輯器度打開咗（呢個唔會存落雲端，但復原返嗰陣保持返原狀會順手啲）
+                open: [...cabinetContent.querySelectorAll('.box')].map(b => b.classList.contains('edit-open'))
+            };
+        }
+        function sameState(a, b) { return !!a && !!b && a.content === b.content && a.title === b.title; }
+
+        function updateHistBtns() {
+            undoBtn.disabled = !(isEditing && hIndex > 0);
+            redoBtn.disabled = !(isEditing && hIndex >= 0 && hIndex < history.length - 1);
+        }
+        function historyReset() {
+            clearTimeout(typingTimer); typingTimer = null;
+            history = [snapshot()]; hIndex = 0;
+            updateHistBtns();
+        }
+        function commit() {
+            if (!isEditing || applyingHistory) return;
+            clearTimeout(typingTimer); typingTimer = null;
+            const s = snapshot();
+            if (sameState(s, history[hIndex])) { history[hIndex] = s; updateHistBtns(); return; }
+            history = history.slice(0, hIndex + 1);
+            history.push(s); hIndex++;
+            if (history.length > HISTORY_MAX) { history.shift(); hIndex--; }
+            updateHistBtns();
+        }
+        function scheduleCommit() {   // 打字：停手 0.7 秒先當一步
+            if (!isEditing || applyingHistory) return;
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(commit, 700);
+        }
+        function flushTyping() { if (typingTimer) commit(); }   // 做其他動作之前，先收尾打緊嗰段
+
+        function applyState(s) {
+            applyingHistory = true;
+            cabinetContent.innerHTML = s.content;
+            pageMainTitle.innerHTML = s.title;
+            [...cabinetContent.querySelectorAll('.box')].forEach((b, i) => {
+                const h = b.querySelector('.box-header');
+                if (h) h.style.display = 'block';        // 編輯模式所有標題都要見到先撳得
+                if (s.open && s.open[i]) b.classList.add('edit-open');
+                addToolbarToBox(b);
+            });
+            applyingHistory = false;
+            markDirty();
+        }
+        // 復原／重做之後個內容係乾淨嘅（冇 contenteditable），撳出面嗰個自動儲存
+        // 判斷唔會 trigger，所以要自己排一次。用 debounce，長撳 Ctrl+Z 唔會寫幾十次。
+        let autoSaveTimer = null;
+        function scheduleAutoSave(delay) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                if (isEditing && isDirty) quickSave(null, '💾 已自動儲存');
+            }, delay || 1200);
+        }
+
+        function doUndo() {
+            if (!isEditing) return;
+            flushTyping();
+            if (hIndex <= 0) { toast('冇嘢可以再復原'); updateHistBtns(); return; }
+            hIndex--; applyState(history[hIndex]); updateHistBtns(); scheduleAutoSave();
+            toast('↩️ 已復原（' + hIndex + ' 步可再復原）');
+        }
+        function doRedo() {
+            if (!isEditing) return;
+            if (hIndex < 0 || hIndex >= history.length - 1) { toast('冇嘢可以重做'); updateHistBtns(); return; }
+            hIndex++; applyState(history[hIndex]); updateHistBtns(); scheduleAutoSave();
+            toast('↪️ 已重做');
+        }
+        undoBtn.addEventListener('click', doUndo);
+        redoBtn.addEventListener('click', doRedo);
+
+        /* ---- 自動儲存：撳咗嗰個方塊以外嘅地方，就即刻鎖返兼儲存 ----
+           判斷準則係「有冇離開個 .box」，所以喺同一個方塊入面撳自己嘅工具列、
+           複製掣、由標題跳去內容，全部都唔算離開，唔會打斷你。 */
+        let titleTouched = false;
+        pageMainTitle.addEventListener('input', () => { titleTouched = true; });
+
+        document.addEventListener('mousedown', e => {
+            if (!isEditing || !e.target || !e.target.closest) return;
+            const insideBox = e.target.closest('#cabinetContent .box');
+            let left = false;
+
+            document.querySelectorAll('#cabinetContent .box').forEach(b => {
+                if (b === insideBox) return;
+                if (b.querySelector('[contenteditable="true"]')) { lockBox(b); left = true; }
+            });
+            if (titleTouched && e.target !== pageMainTitle && !pageMainTitle.contains(e.target)) {
+                titleTouched = false; left = true;
+            }
+            if (left) flushTyping();          // 離開個方塊 = 呢段打字告一段落，記低做一步
+            if (left && isDirty) quickSave(null, '💾 已自動儲存');
+        });
+
+        // 切走去第二個 tab / 收埋個 window 嗰陣都保一手
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden' && isEditing && isDirty) quickSave(null, '💾 已自動儲存');
         });
 
         // 記住最後一次有效嘅反白：撳工具列按鈕會失焦，冇呢個就會「搵唔到選取文字」
@@ -478,6 +621,7 @@
                 : sanitizeHTML(data.html);
             if (!incoming.trim()) { toast('剪貼簿係空嘅', true); return; }
 
+            flushTyping();
             const existing = el.textContent.trim();
             if (existing !== '') {
                 const overwrite = confirm(`「${opts.label}」已經有嘢喺度。\n\n按【確定】= 覆蓋\n按【取消】= 貼喺現有內容後面`);
@@ -485,8 +629,8 @@
             } else {
                 el.innerHTML = incoming;
             }
-            markDirty();
-            toast('✅ 已貼上（記得撳 💾 儲存）');
+            markDirty(); commit();
+            toast('✅ 已貼上（撳錯咗可以 Ctrl+Z）');
         }
 
         /* ===================================================================
@@ -543,17 +687,21 @@
             const sel = window.getSelection();
             sel.removeAllRanges(); sel.addRange(range);
             document.execCommand('createLink', false, pageLink(finalId));
-            markDirty();
+            markDirty(); commit();
             alert(`成功！連結已指向 ID: ${finalId}` + (isPrivate ? '（私人區）' : '') + '\n記得撳 💾 儲存。');
         }
 
         /* ===================================================================
            區塊工具列
            =================================================================== */
-        function mkBtn(cls, html, title, onclick) {
+        // 淨係得 icon；個文字放喺 data-label，靠 CSS 喺 hover 嗰陣先浮出嚟
+        function mkBtn(cls, icon, label, onclick, tipRight) {
             const b = document.createElement('button');
-            b.type = 'button'; b.className = cls; b.innerHTML = html;
-            if (title) b.title = title;
+            b.type = 'button';
+            b.className = 'icon-btn ' + cls + (tipRight ? ' tip-r' : '');
+            b.innerHTML = icon;
+            b.setAttribute('data-label', label);
+            b.setAttribute('aria-label', label);
             b.onclick = onclick;
             return b;
         }
@@ -572,55 +720,74 @@
             const left = document.createElement('div'); left.className = 'tb-group';
 
             const dragHandle = document.createElement('span');
-            dragHandle.className = 'drag-handle'; dragHandle.innerHTML = '☰ 移動';
-            dragHandle.title = '按住嚟拖曳排序';
+            dragHandle.className = 'icon-btn drag-handle'; dragHandle.innerHTML = '☰';
+            dragHandle.setAttribute('data-label', '按住拖曳，可以調換區塊次序');
             dragHandle.addEventListener('mousedown', () => box.setAttribute('draggable', 'true'));
             dragHandle.addEventListener('mouseup', () => box.setAttribute('draggable', 'false'));
             dragHandle.addEventListener('mouseleave', () => box.setAttribute('draggable', 'false'));
 
-            const foldBtn = mkBtn('btn-fold', box.classList.contains('edit-open') ? '▾ 收起' : '▸ 展開',
-                '喺編輯模式收起／展開呢個區塊（唔影響訪客）',
+            const open0 = box.classList.contains('edit-open');
+            const foldBtn = mkBtn('btn-fold', open0 ? '▾' : '▸',
+                open0 ? '收起呢個區塊' : '展開呢個區塊',
                 () => setBoxOpen(box, !box.classList.contains('edit-open')));
 
             // 訪客預設：呢個係會存落雲端嘅 .active class
-            const stateBtn = mkBtn('btn-state', '', '訪客打開頁面時，呢個區塊係展開定縮埋', null);
-            function syncState() {
-                if (box.classList.contains('active')) { stateBtn.innerHTML = '👀 訪客預設：展開'; stateBtn.classList.remove('collapsed'); }
-                else { stateBtn.innerHTML = '👀 訪客預設：縮埋'; stateBtn.classList.add('collapsed'); }
-            }
-            stateBtn.onclick = () => { box.classList.toggle('active'); syncState(); markDirty(); };
-            syncState();
-
+            const stateBtn = mkBtn('btn-state', '', '', null);
+            stateBtn.onclick = () => { flushTyping(); box.classList.toggle('active'); syncStateBtn(box); markDirty(); commit(); };
             left.appendChild(dragHandle); left.appendChild(foldBtn); left.appendChild(stateBtn);
-
-            // --- 中間：複製 / 貼上 ---
-            const mid = document.createElement('div'); mid.className = 'tb-group';
-            mid.appendChild(mkBtn('btn-cp', '📋 複製標題', '複製呢個區塊嘅標題文字', function () { copyElement(header, this); }));
-            mid.appendChild(mkBtn('btn-pt', '📥 貼上標題', '用剪貼簿內容取代／接落標題', () => pasteInto(header, { label: '標題', plainOnly: true })));
-            mid.appendChild(mkBtn('btn-cp', '📋 複製內容', '複製呢個區塊嘅內容（連格式）', function () { copyElement(content, this); }));
-            mid.appendChild(mkBtn('btn-pt', '📥 貼上內容', '用剪貼簿內容取代／接落內容', () => { setBoxOpen(box, true); pasteInto(content, { label: '內容' }); }));
 
             // --- 右邊：變為子頁面、儲存、刪除 ---
             const right = document.createElement('div'); right.className = 'tb-group';
-            right.appendChild(mkBtn('btn-sub', '🔗 變為子頁面', '喺呢個區塊反白文字後撳，將佢變成子頁面連結',
-                () => createSubPageFromSelection(box)));
-            right.appendChild(mkBtn('btn-save-box', '💾 儲存', '即刻儲存成頁（唔會離開編輯模式）', function () { quickSave(this); }));
-            right.appendChild(mkBtn('btn-delete-box', '🗑️ 刪除', '刪除呢個區塊（可以喺最底還原）', () => {
-                if (!confirm('確定要刪除呢個區塊？\n（未儲存之前，可以喺最底撳「還原剛刪除嘅區塊」救返）')) return;
-                lastDeleted = { node: box, parent: box.parentNode, next: box.nextElementSibling };
-                box.remove(); markDirty(); refreshUndoBtn();
-                toast('🗑️ 已刪除，可喺最底還原');
-            }));
+            right.appendChild(mkBtn('btn-sub', '🔗', '將反白咗嘅文字變成子頁面連結',
+                () => createSubPageFromSelection(box), true));
+            right.appendChild(mkBtn('btn-save-box', '💾', '即刻儲存（唔會離開編輯模式）',
+                function () { quickSave(this); }, true));
+            right.appendChild(mkBtn('btn-delete-box', '🗑️', '刪除呢個區塊（撳 ↩️ 或 Ctrl+Z 可以復原）', () => {
+                if (!confirm('確定要刪除呢個區塊？\n（撳錯咗可以用 ↩️ 復原 / Ctrl+Z 救返）')) return;
+                flushTyping();
+                box.remove(); markDirty(); commit();
+                toast('🗑️ 已刪除（Ctrl+Z 可復原）');
+            }, true));
 
             box.ondragstart = () => box.classList.add('dragging');
-            box.ondragend = () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); markDirty(); };
+            box.ondragend = () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); markDirty(); commit(); };
 
-            toolbar.appendChild(left); toolbar.appendChild(mid); toolbar.appendChild(right);
+            toolbar.appendChild(left); toolbar.appendChild(right);
             box.insertBefore(toolbar, box.firstChild);
+            syncStateBtn(box);
+
+            // --- 標題右上角：複製 / 貼上標題 ---
+            if (header) {
+                const tTools = document.createElement('div');
+                tTools.className = 'el-tools title-tools';
+                tTools.setAttribute('contenteditable', 'false');
+                tTools.appendChild(mkBtn('', '📋', '複製標題文字', function () { copyElement(header, this); }, true));
+                tTools.appendChild(mkBtn('', '📥', '將剪貼簿內容貼落標題', () => pasteInto(header, { label: '標題', plainOnly: true }), true));
+                box.insertBefore(tTools, header);
+            }
+
+            // --- 內容右上角：複製 / 貼上內容 ---
+            if (content) {
+                const cTools = document.createElement('div');
+                cTools.className = 'el-tools content-tools';
+                cTools.setAttribute('contenteditable', 'false');
+                cTools.appendChild(mkBtn('', '📋', '複製內容（連格式）', function () { copyElement(content, this); }, true));
+                cTools.appendChild(mkBtn('', '📥', '將剪貼簿內容貼落內容', () => pasteInto(content, { label: '內容' }), true));
+                box.insertBefore(cTools, content);
+            }
         }
 
-        function refreshUndoBtn() {
-            document.getElementById('bbUndo').style.display = lastDeleted ? 'inline-block' : 'none';
+        function syncStateBtn(box) {
+            const btn = box.querySelector('.btn-state');
+            if (!btn) return;
+            if (box.classList.contains('active')) {
+                btn.innerHTML = '📖'; btn.classList.remove('collapsed');
+                btn.setAttribute('data-label', '訪客預設：展開（撳一下改做縮埋）');
+            } else {
+                btn.innerHTML = '📕'; btn.classList.add('collapsed');
+                btn.setAttribute('data-label', '訪客預設：縮埋（撳一下改做展開）');
+            }
+            btn.setAttribute('aria-label', btn.getAttribute('data-label'));
         }
 
         /* ===================================================================
@@ -629,7 +796,7 @@
            =================================================================== */
         function getCleanContentHTML() {
             const clone = cabinetContent.cloneNode(true);
-            clone.querySelectorAll('.box-toolbar').forEach(t => t.remove());
+            clone.querySelectorAll('.box-toolbar, .el-tools').forEach(t => t.remove());
             clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
             clone.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
             clone.querySelectorAll('.box').forEach(box => {
@@ -652,18 +819,22 @@
             return pageMainTitle.textContent.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
         }
 
-        function quickSave(btn) {
+        function quickSave(btn, msg) {
             const titleText = getCleanTitle();
             const contentHTML = getCleanContentHTML();
+            isDirty = false;   // 即刻清走，免得連續觸發自動儲存時寫多幾次
             return Promise.all([
                 db.ref(P_TITLES + '/' + pageId).set(titleText),
                 db.ref(P_PAGES + '/' + pageId).set(contentHTML)
             ]).then(() => {
-                isDirty = false;
-                flash(btn, '✅ 已儲存');
-                toast('✅ 已儲存至雲端' + (isPrivate ? '（私人區）' : ''));
+                flash(btn, '✅');
+                toast(msg || ('✅ 已儲存至雲端' + (isPrivate ? '（私人區）' : '')));
                 buildBreadcrumbs(pageId);
-            }).catch(err => { toast('❌ 儲存失敗：' + err.message, true); alert("儲存失敗: " + err.message); });
+            }).catch(err => {
+                isDirty = true;   // 儲存唔到就要留返個「未儲存」狀態，離開頁面先有警告
+                toast('❌ 儲存失敗：' + err.message, true);
+                if (btn) alert("儲存失敗: " + err.message);
+            });
         }
 
         /* ===================================================================
@@ -673,6 +844,7 @@
             isEditing = true;
             editBtn.style.display = "none"; saveBtn.style.display = "inline-block";
             createLinkBtn.style.display = "inline-block"; addBoxBtn.style.display = "inline-block";
+            undoBtn.style.display = "inline-block"; redoBtn.style.display = "inline-block";
             mainContainer.classList.add('editing');
             editHint.style.display = "block";
             bottomBar.style.display = "flex";
@@ -688,7 +860,7 @@
                 box.classList.remove('edit-open');
                 addToolbarToBox(box);
             });
-            refreshUndoBtn();
+            historyReset();
             toast('✏️ 編輯模式：單擊標題展開，雙擊解鎖編輯');
         });
 
@@ -696,9 +868,11 @@
             isEditing = false; isDirty = false;
             mainContainer.classList.remove('editing');
             createLinkBtn.style.display = "none"; addBoxBtn.style.display = "none";
+            undoBtn.style.display = "none"; redoBtn.style.display = "none";
             editHint.style.display = "none"; bottomBar.style.display = "none";
-            document.querySelectorAll('.box-toolbar').forEach(t => t.remove());
-            lastDeleted = null;
+            document.querySelectorAll('.box-toolbar, .el-tools').forEach(t => t.remove());
+            clearTimeout(typingTimer); typingTimer = null; clearTimeout(autoSaveTimer);
+            history = []; hIndex = -1; updateHistBtns();
 
             pageMainTitle.setAttribute('contenteditable', 'false');
             if (pageMainTitle.textContent.trim() === "" || pageMainTitle.textContent.trim() === "請輸入文章總標題") {
@@ -735,13 +909,14 @@
            新增區塊（頂部同底部共用）
            =================================================================== */
         function addBox() {
-            // 新區塊嘅「訪客預設」= 縮埋（冇 active class）；要展開就自己撳個 👀 掣
+            flushTyping();
+            // 新區塊嘅「訪客預設」= 縮埋（冇 active class）；要展開就自己撳個 📕 掣
             const newBox = document.createElement('div');
             newBox.className = 'box edit-open';
             newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
             cabinetContent.appendChild(newBox);
             addToolbarToBox(newBox);
-            markDirty();
+            markDirty(); commit();
             newBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
             const h = newBox.querySelector('.box-header');
             setTimeout(() => h.focus(), 300);
@@ -767,31 +942,31 @@
                 const header = b.querySelector('.box-header');
                 if (header && header.textContent.trim() === '') return; // 冇標題嘅一定要留返展開
                 b.classList.remove('active');
-                const sb = b.querySelector('.btn-state');
-                if (sb) { sb.innerHTML = '👀 訪客預設：縮埋'; sb.classList.add('collapsed'); }
+                syncStateBtn(b);
             });
-            markDirty(); toast('已全部設為「訪客預設：縮埋」');
-        });
-        document.getElementById('bbUndo').addEventListener('click', () => {
-            if (!lastDeleted) return;
-            const { node, parent, next } = lastDeleted;
-            if (next && next.isConnected) parent.insertBefore(node, next); else parent.appendChild(node);
-            addToolbarToBox(node);
-            lastDeleted = null; refreshUndoBtn(); markDirty();
-            node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            toast('↩️ 已還原');
+            markDirty(); commit(); toast('已全部設為「訪客預設：縮埋」（Ctrl+Z 可復原）');
         });
         document.getElementById('bbTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
         /* ===================================================================
            安全網：Ctrl+S 快速儲存、改咗嘢未儲存就離開會有警告
            =================================================================== */
-        document.addEventListener('input', () => markDirty(), true);
+        document.addEventListener('input', () => { markDirty(); scheduleCommit(); }, true);
         document.addEventListener('keydown', e => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+            const k = (e.key || '').toLowerCase();
+            if (k === 's') {
                 if (!isEditing) return;
                 e.preventDefault();
                 quickSave(document.getElementById('bbSave'));
+            } else if (k === 'z' && !e.shiftKey) {
+                if (!isEditing) return;
+                e.preventDefault();   // 一定要擋住瀏覽器內建嗰個 undo，唔係會做多次
+                doUndo();
+            } else if (k === 'y' || (k === 'z' && e.shiftKey)) {   // Ctrl+Y 同 Ctrl+Shift+Z 都當重做
+                if (!isEditing) return;
+                e.preventDefault();
+                doRedo();
             }
         });
         window.addEventListener('beforeunload', e => {
