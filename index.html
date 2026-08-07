@@ -55,6 +55,8 @@
         .editing .drag-handle { display: inline-block; }
         .btn-add-link { background: #2ecc71; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: auto; }
         .editing .btn-add-link { display: inline-block; }
+        .btn-relink { background: #16a085; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: 6px; }
+        .editing .btn-relink { display: inline-block; }
         .btn-delete { background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: 10px; }
         .editing .btn-delete { display: inline-block; }
 
@@ -225,6 +227,79 @@
             const p = zone === 'private' ? 'private_' : '';
             return { pages: p + 'pages', titles: p + 'page_titles', parents: p + 'page_parents', index: p ? 'private_index_content' : 'index_content' };
         }
+        /* ===================================================================
+           ID 必須獨一無二
+           ---------------------------------------------------------------
+           ⚠ 之前個檢查其實查得唔夠：淨係查緊「當前區域」嘅 pages 一張表。
+           兩個問題：
+             1) 公開區同私人區可以各有一個叫 abc 嘅頁 —— 所以之前跨區搬遷
+                先至要防撞名。而家全域唯一，嗰個情況根本唔會發生（嗰度嘅
+                檢查保留做最後一道保險）。
+             2) 一篇啱啱開、未儲存過內容嘅文章，係得 page_parents 有紀錄，
+                pages 度乜都冇 —— 查 pages 會當佢唔存在，於是開得第二次。
+           所以下面兩個區域 × 三張表，六個位一齊查。
+           =================================================================== */
+        const RESERVED_IDS = ['index'];   // 'index' 系統用嚟代表總目錄，唔可以攞去做頁面 ID
+        const ID_NODES = ['pages', 'page_titles', 'page_parents',
+                          'private_pages', 'private_page_titles', 'private_page_parents'];
+
+        function normalizeId(raw) {
+            return raw.trim().toLowerCase().replace(/\s+/g, '-');
+        }
+        function idProblem(id) {
+            if (!id) return '個 ID 唔可以係空白。';
+            if (id.length > 80) return '個 ID 太長喇（最多 80 個字元）。';
+            if (/[.$#\[\]\/]/.test(id)) return 'Firebase 唔收 .　$　#　[　]　/ 呢幾個符號，請改過。';
+            if (/[?&=%+"'<>\\]/.test(id)) return '個 ID 唔可以有 ?　&　=　%　+　"　\'　<　>　\\ 呢啲符號，會整壞條網址。';
+            if (/[\x00-\x1f\x7f]/.test(id)) return '個 ID 含有唔合法嘅隱藏字元。';
+            if (RESERVED_IDS.indexOf(id) !== -1) return `「${id}」係系統保留字（代表總目錄），請改個第二個。`;
+            return null;
+        }
+        // 有人用緊就 return 'public' / 'private'，冇人用就 return null（讀唔到會 throw）
+        async function idTakenIn(id) {
+            const snaps = await Promise.all(ID_NODES.map(n => db.ref(n + '/' + id).once('value')));
+            for (let i = 0; i < snaps.length; i++) {
+                if (snaps[i].exists()) return ID_NODES[i].indexOf('private_') === 0 ? 'private' : 'public';
+            }
+            return null;
+        }
+        // 自動生成：真係查過冇人用先俾你，唔係求其博個 random 就算
+        async function genUniqueId(prefix) {
+            for (let i = 0; i < 12; i++) {
+                const id = prefix + Math.random().toString(36).slice(2, 8);
+                if (!(await idTakenIn(id))) return id;
+            }
+            return null;
+        }
+        // 一路問到你俾個合法又冇人用嘅 ID 為止；撳取消就 return null
+        async function askUniqueId(headline) {
+            while (true) {
+                const raw = prompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', '');
+                if (raw === null) return null;
+                if (raw.trim() === '') {
+                    let auto = null;
+                    try { auto = await genUniqueId('page_'); }
+                    catch (err) { alert('連唔到雲端，暫時開唔到新頁：' + err.message); return null; }
+                    if (!auto) { alert('自動生成 ID 失敗，請再試一次。'); continue; }
+                    return auto;
+                }
+                const id = normalizeId(raw);
+                const bad = idProblem(id);
+                if (bad) { alert('⚠️ 唔得喎：' + bad); continue; }
+                let taken;
+                try { taken = await idTakenIn(id); }
+                catch (err) {
+                    alert('而家檢查唔到呢個 ID 有冇人用（' + err.message + '）。\n為安全起見暫時唔開得，請稍後再試。');
+                    return null;
+                }
+                if (taken) {
+                    alert(`⚠️ 唔得喎！ID「${id}」已經有人用緊（喺${taken === 'private' ? '🔒 私人區' : '🌐 公開區'}）。\n\n每篇文章嘅 ID 一定要獨一無二，請改個第二個名。`);
+                    continue;
+                }
+                return id;
+            }
+        }
+
         function idOfLink(item) {
             const a = item.querySelector('a'); if (!a) return null;
             try { return new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); }
@@ -249,6 +324,18 @@
                     badge.className = 'cat-count'; badge.setAttribute('contenteditable', 'false');
                     const title = header.querySelector('.cat-title');
                     if (title && title.after) title.after(badge); else header.appendChild(badge);
+                }
+                // 「連結舊文章」：刪咗目錄連結但內容仲留喺雲端嘅孤立頁面，靠呢度加返入嚟。
+                // 執行時先加，所以舊有嘅分類都會有，而且唔會存落雲端。
+                if (!header.querySelector('.btn-relink')) {
+                    const rb = document.createElement('button');
+                    rb.type = 'button'; rb.className = 'btn-relink';
+                    rb.textContent = '🔗 連結舊文章';
+                    rb.title = '將一篇已經存在（但唔喺目錄入面）嘅文章加返入呢個分類';
+                    rb.setAttribute('contenteditable', 'false');
+                    rb.onclick = () => relinkExisting(cat);
+                    const addBtn = header.querySelector('.btn-add-link');
+                    if (addBtn && addBtn.after) addBtn.after(rb); else header.appendChild(rb);
                 }
                 badge.textContent = cat.querySelectorAll('.link-item').length + ' 篇';
                 syncToggle(cat);
@@ -276,7 +363,7 @@
            =================================================================== */
         function cleanHTML(container) {
             const c = container.cloneNode(true);
-            c.querySelectorAll('.cat-toggle, .cat-count').forEach(n => n.remove());
+            c.querySelectorAll('.cat-toggle, .cat-count, .btn-relink').forEach(n => n.remove());
             c.querySelectorAll('.category, .link-item').forEach(n => n.classList.remove('cat-open', 'dragging'));
             c.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
             c.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
@@ -660,6 +747,56 @@
         }
 
         /* ===================================================================
+           連結返一篇已經存在嘅文章
+           因為而家新開文章嘅 ID 一定要唯一，所以「用返舊 ID 嚟駁返條 link」
+           呢條路封咗。呢個掣就係嗰條路嘅正式出口 —— 唔會新開頁，淨係加返條連結。
+           =================================================================== */
+        async function relinkExisting(cat) {
+            const zone = zoneOf(cat);
+            const P = paths(zone);
+            const raw = prompt('請輸入想加返入目錄嗰篇文章嘅 ID：\n（喺 🗄️ 進入後台 嗰度可以睇返所有頁面同佢哋嘅 ID）', '');
+            if (raw === null) return;
+            const id = normalizeId(raw);
+            const bad = idProblem(id);
+            if (bad) return alert('⚠️ ' + bad);
+
+            let where;
+            try { where = await idTakenIn(id); }
+            catch (err) { return alert('檢查失敗：' + err.message); }
+            if (!where) return alert(`搵唔到 ID 叫「${id}」嘅文章。\n如果你想開新文章，請用【+ 新增文章】。`);
+            if (where !== zone) {
+                return alert(`ID「${id}」嗰篇文章而家喺${where === 'private' ? '🔒 私人區' : '🌐 公開區'}，唔喺呢個區域。\n\n請先喺嗰個區域加返佢，再用 ☰ 拖過嚟 —— 拖曳會連埋子頁面同雲端資料一齊搬。`);
+            }
+
+            const already = [...document.querySelectorAll('#indexContent .link-item, #privateContent .link-item')]
+                .some(it => idOfLink(it) === id);
+            if (already) return alert('目錄入面已經有呢篇文章嘅連結喇。');
+
+            const [titleSnap, parentSnap] = await Promise.all([
+                db.ref(P.titles + '/' + id).once('value'),
+                db.ref(P.parents + '/' + id).once('value')
+            ]);
+            const parent = parentSnap.val();
+            if (parent && parent !== 'index') {
+                if (!confirm(`⚠️ 呢篇文章而家係【${parent}】嘅子頁面。\n加返入目錄會將佢變成頂層文章，佢嘅麵包屑導航會跟住改。\n\n確定繼續？`)) return;
+            }
+
+            const inPrivate = zone === 'private';
+            db.ref(P.parents + '/' + id).set('index');
+            const text = (titleSnap.val() || id).replace(/^🔒\s*/, '').trim();
+            const href = `page.html?id=${id}` + (inPrivate ? '&zone=private' : '');
+            const item = document.createElement('div'); item.className = 'link-item';
+            item.innerHTML = `<span class="drag-handle">☰</span> <a href="${href}"></a> <button class="btn-delete del-link">X</button>`;
+            item.querySelector('a').textContent = (inPrivate ? '🔒 ' : '') + text;
+            cat.classList.add('cat-open'); syncToggle(cat);
+            cat.querySelector('.link-list').appendChild(item);
+            if (isEditing) { const a = item.querySelector('a'); a.setAttribute('contenteditable', 'true'); a.onclick = e => e.preventDefault(); }
+            setupButtons(); decorateCategories();
+            markDirty(); scheduleAutoSave();
+            toast('✅ 已加返入目錄：' + text);
+        }
+
+        /* ===================================================================
            各個按鈕
            =================================================================== */
         function setupButtons() {
@@ -718,17 +855,9 @@
                     // 按下呢粒掣嗰刻，睇下佢身處公開區定私人區，決定寫去邊組節點
                     const inPrivate = zoneOf(this) === 'private';
                     const P = paths(inPrivate ? 'private' : 'public');
-                    async function getValidId() {
-                        let customId = prompt((inPrivate ? "【🔒 私人區】" : "") + "請設定 ID (例如：speech-2026)：", "");
-                        if (customId === null) return null;
-                        let tempId = customId.trim() !== "" ? customId.trim().toLowerCase().replace(/\s+/g, '-') : 'page_' + Math.random().toString(36).substr(2, 6);
-                        const snap = await db.ref(P.pages + '/' + tempId).once('value');
-                        if (snap.exists()) {
-                            if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面，按【取消】重新設定。`)) return tempId;
-                            return await getValidId();
-                        } return tempId;
-                    }
-                    const finalId = await getValidId(); if (!finalId) return;
+                    const finalId = await askUniqueId(
+                        (inPrivate ? "【🔒 私人區】" : "【🌐 公開區】") + "請設定新文章嘅 ID（例如：speech-2026）");
+                    if (!finalId) return;
                     db.ref(P.parents + '/' + finalId).set('index');
                     const href = `page.html?id=${finalId}` + (inPrivate ? '&zone=private' : '');
                     const newItem = document.createElement('div'); newItem.className = 'link-item';

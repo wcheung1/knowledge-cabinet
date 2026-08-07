@@ -214,6 +214,79 @@
         const P_PARENTS = isPrivate ? 'private_page_parents' : 'page_parents';
         const pageLink  = id => `page.html?id=${id}` + (isPrivate ? '&zone=private' : '');
 
+        /* ===================================================================
+           ID 必須獨一無二
+           ---------------------------------------------------------------
+           ⚠ 之前個檢查其實查得唔夠：淨係查緊「當前區域」嘅 pages 一張表。
+           兩個問題：
+             1) 公開區同私人區可以各有一個叫 abc 嘅頁 —— 所以之前跨區搬遷
+                先至要防撞名。而家全域唯一，嗰個情況根本唔會發生（嗰度嘅
+                檢查保留做最後一道保險）。
+             2) 一篇啱啱開、未儲存過內容嘅文章，係得 page_parents 有紀錄，
+                pages 度乜都冇 —— 查 pages 會當佢唔存在，於是開得第二次。
+           所以下面兩個區域 × 三張表，六個位一齊查。
+           =================================================================== */
+        const RESERVED_IDS = ['index'];   // 'index' 系統用嚟代表總目錄，唔可以攞去做頁面 ID
+        const ID_NODES = ['pages', 'page_titles', 'page_parents',
+                          'private_pages', 'private_page_titles', 'private_page_parents'];
+
+        function normalizeId(raw) {
+            return raw.trim().toLowerCase().replace(/\s+/g, '-');
+        }
+        function idProblem(id) {
+            if (!id) return '個 ID 唔可以係空白。';
+            if (id.length > 80) return '個 ID 太長喇（最多 80 個字元）。';
+            if (/[.$#\[\]\/]/.test(id)) return 'Firebase 唔收 .　$　#　[　]　/ 呢幾個符號，請改過。';
+            if (/[?&=%+"'<>\\]/.test(id)) return '個 ID 唔可以有 ?　&　=　%　+　"　\'　<　>　\\ 呢啲符號，會整壞條網址。';
+            if (/[\x00-\x1f\x7f]/.test(id)) return '個 ID 含有唔合法嘅隱藏字元。';
+            if (RESERVED_IDS.indexOf(id) !== -1) return `「${id}」係系統保留字（代表總目錄），請改個第二個。`;
+            return null;
+        }
+        // 有人用緊就 return 'public' / 'private'，冇人用就 return null（讀唔到會 throw）
+        async function idTakenIn(id) {
+            const snaps = await Promise.all(ID_NODES.map(n => db.ref(n + '/' + id).once('value')));
+            for (let i = 0; i < snaps.length; i++) {
+                if (snaps[i].exists()) return ID_NODES[i].indexOf('private_') === 0 ? 'private' : 'public';
+            }
+            return null;
+        }
+        // 自動生成：真係查過冇人用先俾你，唔係求其博個 random 就算
+        async function genUniqueId(prefix) {
+            for (let i = 0; i < 12; i++) {
+                const id = prefix + Math.random().toString(36).slice(2, 8);
+                if (!(await idTakenIn(id))) return id;
+            }
+            return null;
+        }
+        // 一路問到你俾個合法又冇人用嘅 ID 為止；撳取消就 return null
+        async function askUniqueId(headline) {
+            while (true) {
+                const raw = prompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', '');
+                if (raw === null) return null;
+                if (raw.trim() === '') {
+                    let auto = null;
+                    try { auto = await genUniqueId(pageId + '_'); }
+                    catch (err) { alert('連唔到雲端，暫時開唔到新頁：' + err.message); return null; }
+                    if (!auto) { alert('自動生成 ID 失敗，請再試一次。'); continue; }
+                    return auto;
+                }
+                const id = normalizeId(raw);
+                const bad = idProblem(id);
+                if (bad) { alert('⚠️ 唔得喎：' + bad); continue; }
+                let taken;
+                try { taken = await idTakenIn(id); }
+                catch (err) {
+                    alert('而家檢查唔到呢個 ID 有冇人用（' + err.message + '）。\n為安全起見暫時唔開得，請稍後再試。');
+                    return null;
+                }
+                if (taken) {
+                    alert(`⚠️ 唔得喎！ID「${id}」已經有人用緊（喺${taken === 'private' ? '🔒 私人區' : '🌐 公開區'}）。\n\n每篇文章嘅 ID 一定要獨一無二，請改個第二個名。`);
+                    continue;
+                }
+                return id;
+            }
+        }
+
         const loginBtn = document.getElementById('loginBtn');
         const statusMessage = document.getElementById('statusMessage');
         const editBtn = document.getElementById('editBtn');
@@ -670,23 +743,9 @@
             }
             const selectedText = range.toString().trim();
 
-            async function getValidId() {
-                let customId = prompt((isPrivate ? "【🔒 私人區】" : "") + "請設定專屬 ID (例如：ai-part2)。\n留空將自動生成帶有 Prefix 嘅 ID：", "");
-                if (customId === null) return null;
-                
-                let tempId = customId.trim() !== "" 
-                    ? customId.trim().toLowerCase().replace(/\s+/g, '-') 
-                    : pageId + '_' + Math.random().toString(36).substr(2, 6);
-                
-                const snap = await db.ref(P_PAGES + '/' + tempId).once('value');
-                if (snap.exists()) {
-                    if (confirm(`⚠️ 警告：「${tempId}」已存在！\n按【確定】連結至該舊頁面。\n按【取消】重新設定。`)) return tempId;
-                    return await getValidId();
-                }
-                return tempId;
-            }
-
-            const finalId = await getValidId(); if (!finalId) return;
+            const finalId = await askUniqueId(
+                (isPrivate ? "【🔒 私人區】" : "") + "請設定呢個子頁面嘅專屬 ID（例如：ai-part2）");
+            if (!finalId) return;
 
             // 私人頁嘅子頁面自動跟埋入私人區（private_page_parents），確保成條 chain 都受保護
             db.ref(P_PARENTS + '/' + finalId).set(pageId);
