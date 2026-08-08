@@ -122,6 +122,66 @@
         #bbTop { background: #34495e; }
 
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
+        /* ===================== ✨ 問 AI ===================== */
+        #aiFab { position: fixed; right: 20px; bottom: 20px; width: 54px; height: 54px; border-radius: 50%;
+                 background: #6c5ce7; color: #fff; font-size: 24px; border: none; cursor: pointer; z-index: 9990;
+                 box-shadow: 0 4px 14px rgba(108,92,231,0.45); display: flex; align-items: center; justify-content: center; }
+        #aiFab:hover { background: #5b4bd6; }
+        #aiPanel { display: none; position: fixed; right: 20px; bottom: 20px; z-index: 9991;
+                   width: min(410px, calc(100vw - 24px)); height: min(620px, calc(100vh - 40px));
+                   background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                   flex-direction: column; overflow: hidden; font-size: 14px; }
+        #aiPanel.open { display: flex; }
+        .ai-head { background: #6c5ce7; color: #fff; padding: 10px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .ai-head .ai-title { font-weight: bold; flex-grow: 1; font-size: 14px; }
+        .ai-head button { background: rgba(255,255,255,0.18); color: #fff; border: none; border-radius: 5px;
+                          width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; }
+        .ai-head button:hover { background: rgba(255,255,255,0.34); }
+
+        #aiSettings { display: none; padding: 14px; background: #f8f9fb; border-bottom: 1px solid #e6e9ef; overflow-y: auto; flex-shrink: 0; max-height: 100%; }
+        #aiSettings.open { display: block; }
+        #aiSettings label { display: block; font-size: 12px; font-weight: bold; color: #34495e; margin: 10px 0 4px; }
+        #aiSettings input, #aiSettings select { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #cfd6dd;
+                          border-radius: 5px; font-size: 13px; font-family: inherit; }
+        #aiSettings .ai-hint { font-size: 11px; color: #7f8c8d; margin-top: 4px; line-height: 1.5; }
+        #aiSettings .ai-warn { background: #fef9e7; border-left: 4px solid #f39c12; color: #7d6608; padding: 8px 10px;
+                               border-radius: 4px; font-size: 11px; line-height: 1.6; margin-top: 12px; }
+        #aiSaveCfg { background: #6c5ce7; color: #fff; border: none; border-radius: 6px; padding: 9px 16px;
+                     font-weight: bold; cursor: pointer; margin-top: 14px; width: 100%; font-size: 13px; }
+
+        #aiMsgs { flex-grow: 1; overflow-y: auto; padding: 12px; background: #f4f7f6; }
+        .ai-msg { margin-bottom: 14px; }
+        .ai-msg .ai-role { font-size: 11px; color: #7f8c8d; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .ai-msg .ai-bubble { background: #fff; border-radius: 8px; padding: 10px 12px; border: 1px solid #e6e9ef;
+                             white-space: pre-wrap; word-wrap: break-word; line-height: 1.65; }
+        .ai-msg.user .ai-bubble { background: #eef0ff; border-color: #d9ddfb; }
+        .ai-copy { background: none; border: none; cursor: pointer; font-size: 12px; padding: 1px 4px; border-radius: 4px; opacity: 0.55; }
+        .ai-copy:hover { opacity: 1; background: #e6e9ef; }
+        .ai-note { font-size: 12px; color: #b9770e; background: #fef9e7; border-left: 3px solid #f39c12;
+                   padding: 7px 10px; border-radius: 4px; margin-bottom: 12px; line-height: 1.6; }
+        .ai-note.err { color: #922b21; background: #fdedec; border-left-color: #e74c3c; }
+
+        .ai-think { border: 1px solid #e6e9ef; border-radius: 8px; margin-bottom: 6px; background: #fbfbfd; overflow: hidden; }
+        .ai-think-head { padding: 6px 10px; font-size: 12px; color: #7f8c8d; cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+        .ai-think-head:hover { background: #f1f3f7; }
+        .ai-think-head .caret { font-size: 10px; }
+        .ai-think-body { display: none; padding: 8px 12px; border-top: 1px dashed #e6e9ef; font-size: 12px;
+                         color: #6b7785; white-space: pre-wrap; line-height: 1.6; max-height: 260px; overflow-y: auto; }
+        .ai-think.open .ai-think-body { display: block; }
+
+        .ai-bubble code { background: #f1f3f7; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+        .ai-bubble pre { background: #2c3e50; color: #ecf0f1; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+        .ai-bubble pre code { background: none; color: inherit; padding: 0; }
+        .ai-bubble h3 { font-size: 15px; margin: 10px 0 4px; }
+        .ai-bubble ul { margin: 6px 0; padding-left: 20px; }
+
+        .ai-foot { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #e6e9ef; background: #fff; flex-shrink: 0; align-items: flex-end; }
+        #aiInput { flex-grow: 1; resize: none; border: 1px solid #cfd6dd; border-radius: 6px; padding: 8px 10px;
+                   font-family: inherit; font-size: 13px; line-height: 1.5; max-height: 110px; }
+        .ai-foot button { border: none; border-radius: 6px; width: 40px; height: 38px; cursor: pointer; font-size: 15px; color: #fff; flex-shrink: 0; }
+        #aiSend { background: #6c5ce7; } #aiSend:disabled { background: #b2aee6; cursor: not-allowed; }
+        #aiStop { background: #e74c3c; display: none; }
+        #aiCtxInfo { font-size: 11px; color: #95a5a6; padding: 0 12px 8px; background: #fff; flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -167,6 +227,54 @@
             <button id="bbExpand">▾ 全部展開</button>
             <button id="bbAllCollapse" title="將所有區塊嘅「訪客預設」一次過設為縮埋">👀 訪客預設全部縮埋</button>
             <button id="bbTop">⬆️ 返回頂部</button>
+        </div>
+    </div>
+
+    <button id="aiFab" title="問 AI（根據本頁內容）">✨</button>
+    <div id="aiPanel">
+        <div class="ai-head">
+            <span class="ai-title">✨ 問 AI（根據本頁內容）</span>
+            <button id="aiSettingsBtn" title="設定 API">⚙️</button>
+            <button id="aiClearBtn" title="清空對話">🧹</button>
+            <button id="aiCloseBtn" title="關閉">✕</button>
+        </div>
+
+        <div id="aiSettings">
+            <label>Base URL</label>
+            <input id="cfgBase" type="text" placeholder="https://api.z.ai/api/paas/v4" spellcheck="false">
+            <div class="ai-hint">結尾唔使加 /chat/completions，程式會自己補。Coding Plan 嘅 key 要用 …/api/coding/paas/v4，一般 API key 就用 …/api/paas/v4。</div>
+
+            <label>Model</label>
+            <input id="cfgModel" type="text" placeholder="glm-5.2" spellcheck="false">
+
+            <label>API Key</label>
+            <input id="cfgKey" type="password" placeholder="貼上你嘅 API Key" spellcheck="false" autocomplete="off">
+
+            <label>回覆長度上限 max_tokens</label>
+            <input id="cfgMaxTokens" type="number" min="256" max="131072" step="256" placeholder="8192">
+            <div class="ai-hint">推理 model 嘅「思考」同「答案」係共用呢個額度。問一頁嘢嘅建議值：<b>8192</b>（夠佢諗又唔會燒錢）。複雜、要跨幾個區塊比較嘅問題可以調到 16384。低過 2048 好容易答到一半就俾人截斷。</div>
+
+            <label>思考深度</label>
+            <select id="cfgThinking">
+                <option value="auto">自動（預設，由 model 決定諗幾耐）</option>
+                <option value="deep">深入（reasoning_effort = max，淨係 GLM-5.2 支援）</option>
+                <option value="off">關閉思考（最快最平，冇推理內容睇）</option>
+            </select>
+
+            <div class="ai-warn">
+                🔐 個 API Key 淨係存喺你呢部機嘅瀏覽器（localStorage），<b>唔會上載去 Firebase，唔會俾其他人睇到</b>。
+                但呢個網頁係公開嘅，如果第日有人喺你個 repo 度改咗啲 code 就有機會偷到，所以唔好用有大額餘額嘅 key，
+                亦記得定期去 Z.ai 後台換 key。
+            </div>
+            <button id="aiSaveCfg">💾 儲存設定</button>
+        </div>
+
+        <div id="aiMsgs"></div>
+        <div id="aiCtxInfo"></div>
+        <div class="ai-foot">
+            <textarea id="aiInput" rows="1" placeholder="問我呢頁嘅嘢…（Enter 送出，Shift+Enter 換行）"></textarea>
+            <button id="aiSend" title="送出">➤</button>
+            <button id="aiStop" title="停止">■</button>
         </div>
     </div>
 
@@ -336,6 +444,8 @@
         function markDirty() { if (isEditing) isDirty = true; }
 
         function showLockedScreen() {
+            const fab = document.getElementById('aiFab'); if (fab) fab.style.display = 'none';
+            const pan = document.getElementById('aiPanel'); if (pan) pan.classList.remove('open');
             pageMainTitle.style.display = "none";
             document.title = "🔒 私人頁面 - Knowledge Cabinet";
             breadcrumbsContainer.innerHTML = `<a href="index.html">← 返回總目錄</a>`;
@@ -653,13 +763,16 @@
            =================================================================== */
         // 注意：區塊收埋咗嗰陣 innerText 會係空（隱藏元素冇 rendered text），
         // 所以要有 fallback，先至可以「唔使展開都複製到」。
-        function plainTextOf(el) {
-            const t = (el.innerText || '').trim();
-            if (t) return t;
+        function nodeToText(el) {
             const clone = el.cloneNode(true);
+            clone.querySelectorAll('.el-tools, .box-toolbar').forEach(n => n.remove());
             clone.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
             clone.querySelectorAll('p,div,li,h1,h2,h3,h4,tr,blockquote').forEach(b => b.append('\n'));
             return (clone.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+        }
+        function plainTextOf(el) {
+            const t = (el.innerText || '').trim();
+            return t || nodeToText(el);
         }
 
         async function copyElement(el, btn) {
@@ -1040,9 +1153,13 @@
         /* ===================================================================
            安全網：Ctrl+S 快速儲存、改咗嘢未儲存就離開會有警告
            =================================================================== */
-        document.addEventListener('input', () => { markDirty(); scheduleCommit(); }, true);
+        document.addEventListener('input', e => {
+            if (e.target && e.target.closest && e.target.closest('#aiPanel')) return;   // AI 對話框唔算改文章
+            markDirty(); scheduleCommit();
+        }, true);
         document.addEventListener('keydown', e => {
             if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+            if (e.target && e.target.closest && e.target.closest('#aiPanel')) return;   // 喺 AI 對話框入面用返瀏覽器本身嘅快捷鍵
             const k = (e.key || '').toLowerCase();
             if (k === 's') {
                 if (!isEditing) return;
@@ -1061,6 +1178,363 @@
         window.addEventListener('beforeunload', e => {
             if (isEditing && isDirty) { e.preventDefault(); e.returnValue = ''; }
         });
+
+        /* ===================================================================
+           ✨ 問 AI —— 用本頁內容做 context 嘅問答
+           ---------------------------------------------------------------
+           · OpenAI 相容格式：POST {baseURL}/chat/completions，SSE 串流
+           · 推理內容喺 delta.reasoning_content（GLM）或者 delta.reasoning
+           · 個 API key 淨係擺喺 localStorage，唔會掂 Firebase
+           =================================================================== */
+        const AI_CFG_KEY = 'kc_ai_cfg_v1';
+        const AI_DEFAULTS = { base: 'https://api.z.ai/api/paas/v4', model: 'glm-5.2', key: '', maxTokens: 8192, thinking: 'auto' };
+        const AI_CTX_LIMIT = 30000;      // 本頁內容最多送幾多字落去
+        const AI_STALL_MS = 60000;       // 幾耐冇收到新字就當佢死咗
+        const AI_MAX_REASONING = 40000;  // 推理長到咁滯都未出答案 = 失控
+
+        const aiFab = document.getElementById('aiFab');
+        const aiPanel = document.getElementById('aiPanel');
+        const aiMsgs = document.getElementById('aiMsgs');
+        const aiInput = document.getElementById('aiInput');
+        const aiSend = document.getElementById('aiSend');
+        const aiStop = document.getElementById('aiStop');
+        const aiSettings = document.getElementById('aiSettings');
+        const aiCtxInfo = document.getElementById('aiCtxInfo');
+
+        let aiCfg = Object.assign({}, AI_DEFAULTS);
+        let aiHistory = [];        // [{role:'user'|'assistant', content:'...'}]
+        let aiBusy = false;
+        let aiAbort = null;
+
+        // ---------- 設定 ----------
+        function aiLoadCfg() {
+            try {
+                const raw = localStorage.getItem(AI_CFG_KEY);
+                if (raw) aiCfg = Object.assign({}, AI_DEFAULTS, JSON.parse(raw));
+            } catch (e) { /* 私隱模式或者壞資料，用返預設 */ }
+            document.getElementById('cfgBase').value = aiCfg.base || '';
+            document.getElementById('cfgModel').value = aiCfg.model || '';
+            document.getElementById('cfgKey').value = aiCfg.key || '';
+            document.getElementById('cfgMaxTokens').value = aiCfg.maxTokens || 8192;
+            document.getElementById('cfgThinking').value = aiCfg.thinking || 'auto';
+        }
+        function aiSaveCfg() {
+            aiCfg = {
+                base: document.getElementById('cfgBase').value.trim().replace(/\/+$/, ''),
+                model: document.getElementById('cfgModel').value.trim(),
+                key: document.getElementById('cfgKey').value.trim(),
+                maxTokens: Math.max(256, Math.min(131072, parseInt(document.getElementById('cfgMaxTokens').value, 10) || 8192)),
+                thinking: document.getElementById('cfgThinking').value
+            };
+            try { localStorage.setItem(AI_CFG_KEY, JSON.stringify(aiCfg)); }
+            catch (e) { aiNote('存唔到設定（瀏覽器唔俾用 localStorage）：' + e.message, true); return; }
+            aiSettings.classList.remove('open');
+            aiNote('✅ 設定已儲存喺呢部機。');
+        }
+        function aiCfgOK() { return aiCfg.base && aiCfg.model && aiCfg.key; }
+
+        // ---------- 本頁內容 ----------
+        function aiPageContext() {
+            const parts = [];
+            const t = pageMainTitle.textContent.trim();
+            if (t && t !== '請輸入文章總標題') parts.push('文章標題：' + t);
+            const crumb = breadcrumbsContainer.textContent.replace(/\s+/g, ' ').trim();
+            if (crumb) parts.push('所在位置：' + crumb);
+            [...cabinetContent.querySelectorAll('.box')].forEach((box, i) => {
+                const h = box.querySelector('.box-header');
+                const c = box.querySelector('.box-content');
+                const ht = h ? h.textContent.trim() : '';
+                const ct = c ? nodeToText(c) : '';
+                if (!ht && !ct) return;
+                parts.push('## ' + (ht || ('區塊 ' + (i + 1))) + '\n' + ct);
+            });
+            let text = parts.join('\n\n');
+            let truncated = false;
+            if (text.length > AI_CTX_LIMIT) { text = text.slice(0, AI_CTX_LIMIT); truncated = true; }
+            return { text, truncated, len: text.length };
+        }
+        function aiUpdateCtxInfo() {
+            const ctx = aiPageContext();
+            aiCtxInfo.textContent = `📄 已讀取本頁 ${ctx.len} 字${ctx.truncated ? '（太長，已截斷）' : ''}`
+                + (aiCfgOK() ? `　·　${aiCfg.model}` : '　·　⚠️ 未設定 API');
+        }
+
+        function aiSystemPrompt(ctx, strict) {
+            return '你係一個知識庫助理。下面係用戶而家睇緊嗰版嘅全部內容。\n'
+                + '規則：\n'
+                + '1. 只可以根據下面嘅內容回答。內容入面搵唔到答案就直接講「呢頁冇提到」，唔好靠估、唔好作。\n'
+                + '2. 用繁體中文回答，精簡、直接、有條理。\n'
+                + '3. 引用嘅時候可以講返係喺邊個區塊標題下面。\n'
+                + (strict ? '4. 極度重要：思考要簡短，直接得出結論。嚴禁重覆同一句說話或者喺度兜圈。\n' : '')
+                + '\n【頁面內容開始】\n' + ctx.text + '\n【頁面內容結束】'
+                + (ctx.truncated ? '\n（注意：內容太長已被截斷，後面部分冇包含喺內。）' : '');
+        }
+
+        // ---------- 打圈偵測 ----------
+        // 喺尾巴度搵有冇一段字連續重覆好多次，例如「等下，等下，等下，…」
+        function aiDetectLoop(text) {
+            const tail = text.slice(-1200);
+            if (tail.length < 150) return null;
+            for (let len = 2; len <= 120; len++) {
+                const unit = tail.slice(-len);
+                if (!unit.trim()) continue;
+                let count = 1, pos = tail.length - len;
+                while (pos - len >= 0 && tail.substr(pos - len, len) === unit) { count++; pos -= len; }
+                if (count >= 4 && count * len >= 150) return unit;
+            }
+            return null;
+        }
+        function LoopError(unit) { const e = new Error('LOOP'); e.name = 'LoopError'; e.unit = unit; return e; }
+
+        // ---------- 畫面 ----------
+        function aiEscape(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        // 好輕量嘅 markdown：一定要先 escape，之後先至加返 tag，唔驚 API 回傳嘅嘢帶 HTML
+        function aiMarkdown(src) {
+            let h = aiEscape(src);
+            const blocks = [];
+            h = h.replace(/```([\s\S]*?)```/g, (m, code) => { blocks.push(code.replace(/^\w*\n/, '')); return '\u0000CB' + (blocks.length - 1) + '\u0000'; });
+            h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+            h = h.replace(/^#{1,6}\s*(.+)$/gm, '<h3>$1</h3>');
+            h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+            h = h.replace(/^\s*[-*]\s+(.+)$/gm, '<li>$1</li>');
+            h = h.replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, '<ul>$1</ul>');
+            h = h.replace(/\u0000CB(\d+)\u0000/g, (m, i) => '<pre><code>' + blocks[+i] + '</code></pre>');
+            return h;
+        }
+        function aiScroll() { aiMsgs.scrollTop = aiMsgs.scrollHeight; }
+        function aiNote(msg, isErr) {
+            const n = document.createElement('div');
+            n.className = 'ai-note' + (isErr ? ' err' : '');
+            n.textContent = msg;
+            aiMsgs.appendChild(n); aiScroll();
+            return n;
+        }
+        function aiCopyBtn(getText, label) {
+            const b = document.createElement('button');
+            b.className = 'ai-copy'; b.type = 'button'; b.innerHTML = '📋'; b.title = label || '複製';
+            b.onclick = async () => {
+                try { await navigator.clipboard.writeText(getText()); b.innerHTML = '✅'; setTimeout(() => b.innerHTML = '📋', 1400); }
+                catch (e) { toast('❌ 複製失敗（瀏覽器唔俾權限，要 https）', true); }
+            };
+            return b;
+        }
+        function aiAddUserMsg(text) {
+            const w = document.createElement('div'); w.className = 'ai-msg user';
+            const r = document.createElement('div'); r.className = 'ai-role';
+            r.appendChild(document.createTextNode('你'));
+            r.appendChild(aiCopyBtn(() => text, '複製我講嘅嘢'));
+            const b = document.createElement('div'); b.className = 'ai-bubble'; b.textContent = text;
+            w.appendChild(r); w.appendChild(b); aiMsgs.appendChild(w); aiScroll();
+        }
+        // 起一個 AI 回覆嘅殼：推理格 + 答案格
+        function aiAddAssistantMsg() {
+            const w = document.createElement('div'); w.className = 'ai-msg assistant';
+            const r = document.createElement('div'); r.className = 'ai-role';
+            r.appendChild(document.createTextNode('AI'));
+            const w_ = w;
+            r.appendChild(aiCopyBtn(() => w_._answer || '', '複製 AI 嘅答案'));
+            const think = document.createElement('div'); think.className = 'ai-think open'; think.style.display = 'none';
+            const th = document.createElement('div'); th.className = 'ai-think-head';
+            th.innerHTML = '<span class="caret">▾</span> 🧠 <span class="tlabel">思考中…</span>';
+            const tcopy = aiCopyBtn(() => w_._reasoning || '', '複製推理內容');
+            tcopy.style.marginLeft = 'auto';
+            tcopy.onclick_ = null;
+            th.appendChild(tcopy);
+            const tb = document.createElement('div'); tb.className = 'ai-think-body';
+            th.onclick = e => { if (e.target === tcopy || tcopy.contains(e.target)) return; think.classList.toggle('open'); th.querySelector('.caret').textContent = think.classList.contains('open') ? '▾' : '▸'; };
+            think.appendChild(th); think.appendChild(tb);
+            const b = document.createElement('div'); b.className = 'ai-bubble'; b.textContent = '';
+            w.appendChild(r); w.appendChild(think); w.appendChild(b);
+            aiMsgs.appendChild(w); aiScroll();
+            w._answer = ''; w._reasoning = '';
+            return { wrap: w, think, thinkHead: th, thinkBody: tb, bubble: b };
+        }
+
+        // ---------- 串流 ----------
+        async function aiStream(messages, ui, strictRetry) {
+            const url = aiCfg.base.replace(/\/+$/, '') + '/chat/completions';
+            const body = {
+                model: aiCfg.model,
+                messages,
+                stream: true,
+                max_tokens: aiCfg.maxTokens
+            };
+            if (aiCfg.thinking === 'off') body.thinking = { type: 'disabled' };
+            else {
+                body.thinking = { type: 'enabled' };
+                if (aiCfg.thinking === 'deep') body.reasoning_effort = 'max';
+            }
+            // 重試嗰次收緊取樣，減少佢再打圈嘅機會（GLM 個 temperature 範圍係 0–1）
+            if (strictRetry) { body.temperature = 0.2; body.top_p = 0.8; }
+
+            aiAbort = new AbortController();
+            let res;
+            try {
+                res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiCfg.key },
+                    body: JSON.stringify(body),
+                    signal: aiAbort.signal
+                });
+            } catch (err) {
+                if (err.name === 'AbortError') throw err;
+                const e = new Error('連唔到 API。可能係：①Base URL 打錯 ②冇網絡 ③個 API 唔容許喺瀏覽器度直接叫（CORS）。\n技術訊息：' + err.message);
+                e.name = 'NetworkError'; throw e;
+            }
+            if (!res.ok) {
+                let detail = '';
+                try { const j = await res.json(); detail = (j.error && (j.error.message || j.error.code)) || j.message || JSON.stringify(j).slice(0, 300); }
+                catch (e) { try { detail = (await res.text()).slice(0, 300); } catch (e2) {} }
+                throw new Error(`API 回覆 ${res.status}：${detail}`);
+            }
+            if (!res.body) throw new Error('呢個瀏覽器唔支援串流讀取。');
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buf = '', finish = null, lastTick = Date.now();
+
+            const stall = setInterval(() => {
+                if (Date.now() - lastTick > AI_STALL_MS && aiAbort) aiAbort.abort();
+            }, 5000);
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    lastTick = Date.now();
+                    buf += decoder.decode(value, { stream: true });
+                    const lines = buf.split('\n');
+                    buf = lines.pop();
+                    for (const raw of lines) {
+                        const line = raw.trim();
+                        if (!line || !line.startsWith('data:')) continue;
+                        const payload = line.slice(5).trim();
+                        if (payload === '[DONE]') continue;
+                        let json;
+                        try { json = JSON.parse(payload); } catch (e) { continue; }
+                        const ch = json.choices && json.choices[0];
+                        if (!ch) continue;
+                        if (ch.finish_reason) finish = ch.finish_reason;
+                        const d = ch.delta || ch.message || {};
+                        const rc = d.reasoning_content || d.reasoning;
+                        if (rc) {
+                            ui.wrap._reasoning += rc;
+                            ui.think.style.display = 'block';
+                            ui.thinkBody.textContent = ui.wrap._reasoning;
+                            ui.thinkBody.scrollTop = ui.thinkBody.scrollHeight;
+                            aiScroll();
+                            const unit = aiDetectLoop(ui.wrap._reasoning);
+                            if (unit) throw LoopError(unit);
+                            if (ui.wrap._reasoning.length > AI_MAX_REASONING && !ui.wrap._answer) throw LoopError('（推理過長）');
+                        }
+                        if (d.content) {
+                            ui.wrap._answer += d.content;
+                            ui.bubble.textContent = ui.wrap._answer;
+                            aiScroll();
+                            const unit = aiDetectLoop(ui.wrap._answer);
+                            if (unit) throw LoopError(unit);
+                        }
+                    }
+                }
+            } finally {
+                clearInterval(stall);
+                try { reader.cancel(); } catch (e) {}
+            }
+            return finish;
+        }
+
+        // ---------- 一問一答（連自動重試）----------
+        async function aiAsk(question) {
+            if (aiBusy) return;
+            if (!aiCfgOK()) { aiSettings.classList.add('open'); aiNote('請先填 Base URL、Model 同 API Key。', true); return; }
+
+            aiBusy = true; aiSend.disabled = true; aiStop.style.display = 'block';
+            aiAddUserMsg(question);
+            aiHistory.push({ role: 'user', content: question });
+
+            const ctx = aiPageContext();
+            let ui = aiAddAssistantMsg();
+
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                const strict = attempt === 2;
+                const messages = [{ role: 'system', content: aiSystemPrompt(ctx, strict) }]
+                    .concat(aiHistory.slice(-12));   // 只帶最近幾轉，慳 token
+                try {
+                    const finish = await aiStream(messages, ui, strict);
+                    ui.wrap._answer = ui.wrap._answer || '（model 冇俾到內容）';
+                    ui.bubble.innerHTML = aiMarkdown(ui.wrap._answer);
+                    // 答完自動摺埋推理
+                    ui.think.classList.remove('open');
+                    ui.thinkHead.querySelector('.caret').textContent = '▸';
+                    ui.thinkHead.querySelector('.tlabel').textContent = ui.wrap._reasoning
+                        ? `推理過程（${ui.wrap._reasoning.length} 字，撳我展開）` : '（今次冇推理內容）';
+                    if (!ui.wrap._reasoning) ui.think.style.display = 'none';
+                    aiHistory.push({ role: 'assistant', content: ui.wrap._answer });
+                    if (finish === 'length') aiNote('⚠️ 答案去到 max_tokens 上限被截斷。可以喺 ⚙️ 設定調高，或者問細啲。');
+                    if (finish === 'sensitive') aiNote('⚠️ 內容被平台安全策略攔截。', true);
+                    break;
+                } catch (err) {
+                    if (err.name === 'AbortError') {
+                        aiNote(aiAbort && aiAbort.signal.reason === 'user' ? '⏹ 已停止。' : '⏹ 已停止（可能係太耐冇回應）。');
+                        aiHistory.pop();
+                        ui.wrap.remove();
+                        break;
+                    }
+                    if (err.name === 'LoopError' && attempt === 1) {
+                        try { aiAbort.abort(); } catch (e) {}
+                        aiNote('⚠️ 偵測到 AI 喺度不停重覆（「' + String(err.unit).trim().slice(0, 20) + '…」），已經刹停佢，自動重試一次…');
+                        ui.wrap.remove();
+                        ui = aiAddAssistantMsg();
+                        continue;
+                    }
+                    if (err.name === 'LoopError') {
+                        try { aiAbort.abort(); } catch (e) {}
+                        aiNote('❌ 重試之後仍然喺度打圈，已經停止。建議：換個問法／問細少少／喺 ⚙️ 設定將「思考深度」較做「關閉思考」再試。', true);
+                        ui.wrap.remove();
+                        aiHistory.pop();
+                        break;
+                    }
+                    aiNote('❌ ' + err.message, true);
+                    ui.wrap.remove();
+                    aiHistory.pop();
+                    break;
+                }
+            }
+            aiBusy = false; aiSend.disabled = false; aiStop.style.display = 'none'; aiAbort = null;
+            aiScroll();
+        }
+
+        // ---------- 掛事件 ----------
+        aiFab.addEventListener('click', () => {
+            aiPanel.classList.add('open'); aiFab.style.display = 'none';
+            aiUpdateCtxInfo();
+            if (!aiCfgOK()) aiSettings.classList.add('open');
+            setTimeout(() => aiInput.focus(), 100);
+        });
+        document.getElementById('aiCloseBtn').addEventListener('click', () => {
+            aiPanel.classList.remove('open'); aiFab.style.display = 'flex';
+        });
+        document.getElementById('aiSettingsBtn').addEventListener('click', () => aiSettings.classList.toggle('open'));
+        document.getElementById('aiSaveCfg').addEventListener('click', () => { aiSaveCfg(); aiUpdateCtxInfo(); });
+        document.getElementById('aiClearBtn').addEventListener('click', () => {
+            if (aiBusy) return;
+            aiHistory = []; aiMsgs.innerHTML = ''; aiNote('對話已清空。');
+        });
+        aiStop.addEventListener('click', () => { if (aiAbort) { try { aiAbort.abort('user'); } catch (e) { aiAbort.abort(); } } });
+        aiSend.addEventListener('click', () => {
+            const q = aiInput.value.trim(); if (!q || aiBusy) return;
+            aiInput.value = ''; aiInput.style.height = 'auto';
+            aiAsk(q);
+        });
+        aiInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend.click(); }
+        });
+        aiInput.addEventListener('input', () => {
+            aiInput.style.height = 'auto';
+            aiInput.style.height = Math.min(110, aiInput.scrollHeight) + 'px';
+        });
+        aiLoadCfg();
+
     </script>
 </body>
 </html>
