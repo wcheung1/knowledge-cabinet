@@ -59,7 +59,8 @@
            ⚠ 下面個 apiKey 係公開嘅，冇問題 —— Firebase 個 apiKey 淨係識別
            邊個 project，唔係密碼。真正擋人嘅係 Realtime Database 嘅安全規則。
            截至 2026-08 已部署嘅規則（同 repo 入面 database.rules.json 一樣；
-           private_* 嗰四條係 2026-08 為「私人區域」功能加嘅）：
+           private_* 嗰四條係為「私人區域」加，page_categories 嗰兩條係為
+           麵包屑中間嗰層「分類名」加）：
              {
           "rules": {
             "pages": {
@@ -97,12 +98,23 @@
             "private_index_content": {
               ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
               ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_categories": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_categories": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
             }
           }
         }
            即係：淨係本人('w.cheung815@gmail.com')先讀寫得到自己admin下面嗰份資料；root 同其他路徑冇寫
            .read/.write，預設一律拒絕。未登入嗰陣 auth 係 null，條式永遠唔成立。
            private_* 路徑連 .read 都鎖埋，所以「私人區域」嘅文章就算有 link 都開唔到。
+           page_categories 係一張「頁面 ID → 分類名」嘅細對照表，由 index.html
+           儲存時自動重寫，俾 page.html 砌麵包屑中間嗰層用（公開區跟返 pages
+           一樣公開可讀，私人區照樣鎖死）。
            ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
            記得順手改返呢度同 database.rules.json，唔好等佢過時。
         ========================================================= */

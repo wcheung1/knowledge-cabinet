@@ -120,7 +120,8 @@
            ⚠ 下面個 apiKey 係公開嘅，冇問題 —— Firebase 個 apiKey 淨係識別
            邊個 project，唔係密碼。真正擋人嘅係 Realtime Database 嘅安全規則。
            截至 2026-08 已部署嘅規則（同 repo 入面 database.rules.json 一樣；
-           private_* 嗰四條係 2026-08 為「私人區域」功能加嘅）：
+           private_* 嗰四條係為「私人區域」加，page_categories 嗰兩條係為
+           麵包屑中間嗰層「分類名」加）：
              {
           "rules": {
             "pages": {
@@ -158,12 +159,23 @@
             "private_index_content": {
               ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
               ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "page_categories": {
+              ".read": true,
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
+            },
+            "private_page_categories": {
+              ".read": "auth != null && auth.token.email === 'w.cheung815@gmail.com'",
+              ".write": "auth != null && auth.token.email === 'w.cheung815@gmail.com'"
             }
           }
         }
            即係：淨係本人('w.cheung815@gmail.com')先讀寫得到自己admin下面嗰份資料；root 同其他路徑冇寫
            .read/.write，預設一律拒絕。未登入嗰陣 auth 係 null，條式永遠唔成立。
            private_* 路徑連 .read 都鎖埋，所以「私人區域」嘅文章就算有 link 都開唔到。
+           page_categories 係一張「頁面 ID → 分類名」嘅細對照表，由 index.html
+           儲存時自動重寫，俾 page.html 砌麵包屑中間嗰層用（公開區跟返 pages
+           一樣公開可讀，私人區照樣鎖死）。
            ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
            記得順手改返呢度同 database.rules.json，唔好等佢過時。
         ========================================================= */
@@ -386,6 +398,42 @@
             });
         }
 
+        /* ===================================================================
+           分類名稱同步落雲端
+           ---------------------------------------------------------------
+           「呢篇文屬於邊個分類」呢個資訊，本來淨係存在於 index_content 嗰段
+           HTML 入面。但 index_content 嘅 .read 係鎖住淨係 Admin 睇得，
+           所以 page.html 嗰邊（訪客開公開文章嗰陣）根本讀唔到。
+           於是喺度整多一張細細嘅對照表俾 page.html 讀，做麵包屑中間嗰層。
+           每次儲存都成張表重寫一次，咁改名／搬分類／刪連結都會自動跟得上。
+           =================================================================== */
+        let catSyncWarned = false;
+        function buildCategoryMap(container) {
+            const map = {};
+            container.querySelectorAll('.category').forEach(cat => {
+                const t = cat.querySelector('.cat-title');
+                const name = t ? t.textContent.trim() : '';
+                if (!name) return;
+                cat.querySelectorAll('.link-item').forEach(item => {
+                    const id = idOfLink(item);
+                    if (id) map[id] = name;
+                });
+            });
+            return map;
+        }
+        function syncCategoryMap() {
+            const jobs = [];
+            if (publicLoaded)  jobs.push(db.ref('page_categories').set(buildCategoryMap(indexContent)));
+            if (privateLoaded) jobs.push(db.ref('private_page_categories').set(buildCategoryMap(privateContent)));
+            // 呢個係「錦上添花」嘅資料，寫唔到都唔應該連累成次儲存失敗
+            // （最常見原因：database rules 未加 page_categories 呢兩條）
+            Promise.all(jobs).catch(err => {
+                if (catSyncWarned) return;
+                catSyncWarned = true;
+                toast('⚠️ 分類名稱同步唔到（麵包屑會少咗中間嗰層）。請喺 Firebase Console 加 page_categories 規則。', true);
+            });
+        }
+
         function saveAll(silent) {
             const jobs = [db.ref('main_title').set(mainTitle.innerHTML)];
             // 未成功載入嗰個區就唔好寫，免得一儲存就清空咗雲端資料
@@ -395,6 +443,7 @@
             return Promise.all(jobs).then(() => {
                 if (publicLoaded) syncTitles(indexContent, 'page_titles');
                 if (privateLoaded) syncTitles(privateContent, 'private_page_titles');
+                syncCategoryMap();
                 toast(silent ? '💾 已自動儲存' : '✅ 目錄已儲存至雲端');
             }).catch(err => {
                 isDirty = true;
@@ -507,6 +556,10 @@
         /* ===================================================================
            Backup & Restore（已包埋 private_* 四個節點）
            =================================================================== */
+        // 讀唔到（例如規則未部署）就當佢係空，唔好拖垮成個備份
+        function safeOnce(path) {
+            return db.ref(path).once('value').catch(() => ({ val: () => null }));
+        }
         backupBtn.addEventListener('click', async () => {
             try {
                 const originalText = backupBtn.innerText;
@@ -514,7 +567,8 @@
                 
                 // 逐個合法嘅節點去讀取資料，避開根目錄 (Root) 嘅權限封鎖
                 const [pagesSnap, titlesSnap, mainSnap, indexSnap, parentsSnap,
-                       pPagesSnap, pTitlesSnap, pParentsSnap, pIndexSnap] = await Promise.all([
+                       pPagesSnap, pTitlesSnap, pParentsSnap, pIndexSnap,
+                       catsSnap, pCatsSnap] = await Promise.all([
                     db.ref('pages').once('value'),
                     db.ref('page_titles').once('value'),
                     db.ref('main_title').once('value'),
@@ -523,7 +577,9 @@
                     db.ref('private_pages').once('value'),
                     db.ref('private_page_titles').once('value'),
                     db.ref('private_page_parents').once('value'),
-                    db.ref('private_index_content').once('value')
+                    db.ref('private_index_content').once('value'),
+                    safeOnce('page_categories'),
+                    safeOnce('private_page_categories')
                 ]);
 
                 const backupData = {
@@ -535,7 +591,9 @@
                     private_pages: pPagesSnap.val(),
                     private_page_titles: pTitlesSnap.val(),
                     private_page_parents: pParentsSnap.val(),
-                    private_index_content: pIndexSnap.val()
+                    private_index_content: pIndexSnap.val(),
+                    page_categories: catsSnap.val(),
+                    private_page_categories: pCatsSnap.val()
                 };
 
                 const blob = new Blob([JSON.stringify(backupData, null, 2)], {type: 'application/json'});
@@ -560,7 +618,8 @@
                     // Root 冇 .write 權限，所以要逐個節點寫入（同備份嘅思路一樣）
                     // 只覆蓋備份檔入面「有出現」嘅 key —— 舊備份冇 private_* 就唔會誤刪私人區
                     const KNOWN_KEYS = ['pages','page_titles','main_title','index_content','page_parents',
-                                        'private_pages','private_page_titles','private_page_parents','private_index_content'];
+                                        'private_pages','private_page_titles','private_page_parents','private_index_content',
+                                        'page_categories','private_page_categories'];
                     const writes = KNOWN_KEYS
                         .filter(k => Object.prototype.hasOwnProperty.call(data, k))
                         .map(k => db.ref(k).set(data[k]));

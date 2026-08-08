@@ -16,6 +16,7 @@
         .breadcrumbs { font-size: 14px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ecf0f1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #7f8c8d; }
         .breadcrumbs a { color: #3498db; text-decoration: none; font-weight: bold; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
         .breadcrumbs a:hover { text-decoration: underline; color: #2980b9; }
+        .breadcrumbs span.crumb-cat { color: #7f8c8d; font-weight: bold; max-width: 160px; }
         .breadcrumbs span { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; font-weight: bold; color: #2c3e50; }
 
         .nav-bar { margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
@@ -185,6 +186,9 @@
            - index_content 同所有 private_* 路徑（private_pages、
              private_page_titles、private_page_parents、private_index_content）：
              .read 同 .write 都淨係本人 —— 所以私人區文章有 link 都開唔到。
+           - page_categories / private_page_categories：由 index.html 儲存時寫出嚟嘅
+             「頁面 ID → 分類名」對照表，用嚟砌麵包屑中間嗰層。公開嗰個 .read 公開，
+             私人嗰個鎖死；讀唔到嘅話麵包屑淨係會少咗中間嗰層，唔會出事。
            - root 同其他路徑冇寫 .read/.write，預設一律拒絕。
              未登入嗰陣 auth 係 null，條式永遠唔成立。
            ⚠ 呢段淨係「文件」，唔會生效。改咗 Firebase Console 嘅規則之後，
@@ -356,7 +360,7 @@
                     if(snap.exists() && snap.val().trim() !== "") {
                         pageMainTitle.innerHTML = snap.val();
                         pageMainTitle.style.display = "inline-block";
-                        document.title = pageMainTitle.innerText.trim() + " - Knowledge Cabinet";
+                        document.title = pageMainTitle.textContent.trim() + " - Knowledge Cabinet";   // 用 textContent：innerText 對隱藏元素會 return 空
                         buildBreadcrumbs(pageId); 
                     } else {
                         pageMainTitle.style.display = "none";
@@ -414,6 +418,21 @@
             } catch(e) { /* main_title 讀唔到就用預設 */ }
             
             let html = `<a href="index.html" title="${mainTitleText}">${mainTitleText}</a>`;
+
+            // 中間嗰層：呢篇文喺總目錄邊個大分類之下。
+            // 分類名唔喺 page_parents 條鏈度（佢淨係 HTML 結構），所以 index.html
+            // 儲存嗰陣會另外寫一張 page_categories 對照表出嚟俾呢度讀。
+            // 讀唔到（例如規則未部署）就靜靜雞唔顯示，唔好整壞成條麵包屑。
+            if (pathChain.length > 0) {
+                try {
+                    const catSnap = await db.ref((isPrivate ? 'private_page_categories' : 'page_categories') + '/' + pathChain[0]).once('value');
+                    const catName = catSnap.exists() ? String(catSnap.val()).trim() : '';
+                    if (catName) {
+                        const safe = escapeHTML(catName);
+                        html += ` &nbsp;❯&nbsp; <span class="crumb-cat" title="${safe}">📁 ${safe}</span>`;
+                    }
+                } catch (e) { /* 冇權限或者未部署規則，略過 */ }
+            }
             
             for (let i = 0; i < pathChain.length; i++) {
                 const id = pathChain[i];
