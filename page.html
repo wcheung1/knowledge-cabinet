@@ -157,6 +157,16 @@
         .ai-msg.user .ai-bubble { background: #eef0ff; border-color: #d9ddfb; }
         .ai-copy { background: none; border: none; cursor: pointer; font-size: 12px; padding: 1px 4px; border-radius: 4px; opacity: 0.55; }
         .ai-copy:hover { opacity: 1; background: #e6e9ef; }
+        .ai-copy-wrap { position: relative; display: inline-flex; align-items: center; }
+        .ai-copy-caret { font-size: 9px; padding: 1px 3px; }
+        .ai-copy-menu { display: none; position: absolute; left: 0; top: 130%; z-index: 40; background: #fff;
+                        border: 1px solid #d8dee6; border-radius: 7px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+                        overflow: hidden; min-width: 232px; }
+        .ai-copy-menu.open { display: block; }
+        .ai-copy-menu button { display: block; width: 100%; text-align: left; background: none; border: none;
+                               padding: 8px 12px; font-size: 12px; cursor: pointer; color: #2c3e50; font-family: inherit; line-height: 1.4; }
+        .ai-copy-menu button:hover { background: #eef0ff; }
+        .ai-copy-menu button small { display: block; color: #95a5a6; font-size: 10.5px; margin-top: 1px; }
         .ai-note { font-size: 12px; color: #b9770e; background: #fef9e7; border-left: 3px solid #f39c12;
                    padding: 7px 10px; border-radius: 4px; margin-bottom: 12px; line-height: 1.6; }
         .ai-note.err { color: #922b21; background: #fdedec; border-left-color: #e74c3c; }
@@ -181,7 +191,26 @@
         .ai-foot button { border: none; border-radius: 6px; width: 40px; height: 38px; cursor: pointer; font-size: 15px; color: #fff; flex-shrink: 0; }
         #aiSend { background: #6c5ce7; } #aiSend:disabled { background: #b2aee6; cursor: not-allowed; }
         #aiStop { background: #e74c3c; display: none; }
-        #aiCtxInfo { font-size: 11px; color: #95a5a6; padding: 0 12px 8px; background: #fff; flex-shrink: 0; }
+        #aiQuickBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; color: #95a5a6;
+                      padding: 6px 12px; background: #fff; border-top: 1px solid #f0f2f5; flex-shrink: 0; }
+        #aiQuickBar .qb-item { display: flex; align-items: center; gap: 4px; color: #7f8c8d; font-weight: bold; }
+        #aiQuickBar select { border: 1px solid #cfd6dd; border-radius: 4px; padding: 2px 4px; font-size: 11px;
+                             font-family: inherit; color: #34495e; background: #fff; cursor: pointer; }
+        #aiTotalTok { margin-left: auto; color: #7f8c8d; }
+
+        /* 每答完一次，喺下面報返用咗幾多 token */
+        .ai-usage { font-size: 11px; color: #95a5a6; margin-top: 5px; padding-left: 2px; line-height: 1.6; }
+        .ai-usage b { color: #6c5ce7; font-weight: bold; }
+
+        /* 放大 / 自己拉大細 */
+        #aiPanel.max { right: 12px !important; bottom: 12px !important;
+                       width: calc(100vw - 24px) !important; height: calc(100vh - 24px) !important; }
+        #aiResizer { position: absolute; left: 0; top: 0; width: 20px; height: 20px; cursor: nwse-resize; z-index: 5;
+                     background: linear-gradient(135deg, rgba(255,255,255,0.85) 0 2px, transparent 2px 5px,
+                                 rgba(255,255,255,0.85) 5px 7px, transparent 7px 10px,
+                                 rgba(255,255,255,0.85) 10px 12px, transparent 12px); }
+        #aiPanel.max #aiResizer { display: none; }
+        #aiPanel.resizing { user-select: none; }
     </style>
 </head>
 <body>
@@ -232,8 +261,10 @@
 
     <button id="aiFab" title="問 AI（根據本頁內容）">✨</button>
     <div id="aiPanel">
+        <div id="aiResizer" title="拉我改大細"></div>
         <div class="ai-head">
             <span class="ai-title">✨ 問 AI（根據本頁內容）</span>
+            <button id="aiMaxBtn" title="放大 / 還原">⛶</button>
             <button id="aiSettingsBtn" title="設定 API">⚙️</button>
             <button id="aiClearBtn" title="清空對話">🧹</button>
             <button id="aiCloseBtn" title="關閉">✕</button>
@@ -250,10 +281,6 @@
             <label>API Key</label>
             <input id="cfgKey" type="password" placeholder="貼上你嘅 API Key" spellcheck="false" autocomplete="off">
 
-            <label>回覆長度上限 max_tokens</label>
-            <input id="cfgMaxTokens" type="number" min="256" max="131072" step="256" placeholder="8192">
-            <div class="ai-hint">推理 model 嘅「思考」同「答案」係共用呢個額度。問一頁嘢嘅建議值：<b>8192</b>（夠佢諗又唔會燒錢）。複雜、要跨幾個區塊比較嘅問題可以調到 16384。低過 2048 好容易答到一半就俾人截斷。</div>
-
             <label>思考深度</label>
             <select id="cfgThinking">
                 <option value="auto">自動（預設，由 model 決定諗幾耐）</option>
@@ -261,16 +288,31 @@
                 <option value="off">關閉思考（最快最平，冇推理內容睇）</option>
             </select>
 
-            <div class="ai-warn">
-                🔐 個 API Key 淨係存喺你呢部機嘅瀏覽器（localStorage），<b>唔會上載去 Firebase，唔會俾其他人睇到</b>。
-                但呢個網頁係公開嘅，如果第日有人喺你個 repo 度改咗啲 code 就有機會偷到，所以唔好用有大額餘額嘅 key，
-                亦記得定期去 Z.ai 後台換 key。
+            <div class="ai-hint" style="margin-top:12px;">
+                🔐 個 Key 淨係存喺你呢部機嘅瀏覽器（localStorage，同網域綁定），唔會上載去 Firebase，
+                朋友開你條 link 都攞唔到。換部機／清咗瀏覽器資料就要再填一次。公共電腦就梗係唔好填。
             </div>
+            <div class="ai-hint">💡 回覆長度上限（max_tokens）喺對話框最底嗰行，隨時撳得，唔使入嚟呢度改。</div>
             <button id="aiSaveCfg">💾 儲存設定</button>
         </div>
 
         <div id="aiMsgs"></div>
-        <div id="aiCtxInfo"></div>
+        <div id="aiQuickBar">
+            <span id="aiCtxInfo"></span>
+            <label class="qb-item">上限
+                <select id="cfgMaxTokens">
+                    <option value="2048">2K（快問快答）</option>
+                    <option value="4096">4K</option>
+                    <option value="8192">8K（預設）</option>
+                    <option value="16384">16K</option>
+                    <option value="32768">32K</option>
+                    <option value="65536">64K（max 推理）</option>
+                    <option value="98304">96K</option>
+                    <option value="131072">128K（上限）</option>
+                </select>
+            </label>
+            <span id="aiTotalTok"></span>
+        </div>
         <div class="ai-foot">
             <textarea id="aiInput" rows="1" placeholder="問我呢頁嘅嘢…（Enter 送出，Shift+Enter 換行）"></textarea>
             <button id="aiSend" title="送出">➤</button>
@@ -1187,6 +1229,7 @@
            · 個 API key 淨係擺喺 localStorage，唔會掂 Firebase
            =================================================================== */
         const AI_CFG_KEY = 'kc_ai_cfg_v1';
+        const AI_SIZE_KEY = 'kc_ai_size_v1';
         const AI_DEFAULTS = { base: 'https://api.z.ai/api/paas/v4', model: 'glm-5.2', key: '', maxTokens: 8192, thinking: 'auto' };
         const AI_CTX_LIMIT = 30000;      // 本頁內容最多送幾多字落去
         const AI_STALL_MS = 60000;       // 幾耐冇收到新字就當佢死咗
@@ -1215,10 +1258,12 @@
             document.getElementById('cfgBase').value = aiCfg.base || '';
             document.getElementById('cfgModel').value = aiCfg.model || '';
             document.getElementById('cfgKey').value = aiCfg.key || '';
-            document.getElementById('cfgMaxTokens').value = aiCfg.maxTokens || 8192;
+            const mt = document.getElementById('cfgMaxTokens');
+            mt.value = String(aiCfg.maxTokens || 8192);
+            if (!mt.value) mt.value = '8192';
             document.getElementById('cfgThinking').value = aiCfg.thinking || 'auto';
         }
-        function aiSaveCfg() {
+        function aiSaveCfg(quiet) {
             aiCfg = {
                 base: document.getElementById('cfgBase').value.trim().replace(/\/+$/, ''),
                 model: document.getElementById('cfgModel').value.trim(),
@@ -1228,10 +1273,94 @@
             };
             try { localStorage.setItem(AI_CFG_KEY, JSON.stringify(aiCfg)); }
             catch (e) { aiNote('存唔到設定（瀏覽器唔俾用 localStorage）：' + e.message, true); return; }
+            if (quiet) { toast('回覆上限已較做 ' + aiFmt(aiCfg.maxTokens) + ' tokens'); return; }
             aiSettings.classList.remove('open');
             aiNote('✅ 設定已儲存喺呢部機。');
         }
         function aiCfgOK() { return aiCfg.base && aiCfg.model && aiCfg.key; }
+
+        /* ---------- 放大 / 拉大細 ---------- */
+        function aiApplySize() {
+            let sz = null;
+            try { sz = JSON.parse(localStorage.getItem(AI_SIZE_KEY) || 'null'); } catch (e) {}
+            if (sz && sz.max) { aiPanel.classList.add('max'); return; }
+            if (sz && sz.w && sz.h) {
+                aiPanel.style.width = sz.w + 'px';
+                aiPanel.style.height = sz.h + 'px';
+            }
+        }
+        // 量返個框而家幾大：優先用實際 render 出嚟嘅尺寸，讀唔到就退返落 inline style / 預設值
+        function aiPanelSize() {
+            const r = aiPanel.getBoundingClientRect();
+            return {
+                w: Math.round(r.width || parseInt(aiPanel.style.width, 10) || aiPanel.offsetWidth || 410),
+                h: Math.round(r.height || parseInt(aiPanel.style.height, 10) || aiPanel.offsetHeight || 620)
+            };
+        }
+        function aiSaveSize(extra) {
+            const cur = aiPanelSize();
+            const data = Object.assign({
+                w: cur.w, h: cur.h,
+                max: aiPanel.classList.contains('max')
+            }, extra || {});
+            try { localStorage.setItem(AI_SIZE_KEY, JSON.stringify(data)); } catch (e) {}
+        }
+        document.getElementById('aiMaxBtn').addEventListener('click', () => {
+            aiPanel.classList.toggle('max');
+            if (!aiPanel.classList.contains('max')) {
+                // 還原返之前自己拉嗰個大細
+                let sz = null;
+                try { sz = JSON.parse(localStorage.getItem(AI_SIZE_KEY) || 'null'); } catch (e) {}
+                if (sz && sz.w && sz.h) { aiPanel.style.width = sz.w + 'px'; aiPanel.style.height = sz.h + 'px'; }
+            }
+            aiSaveSize();
+            aiScroll();
+        });
+        (function aiSetupResize() {
+            const grip = document.getElementById('aiResizer');
+            let sx = 0, sy = 0, sw = 0, sh = 0, on = false;
+            grip.addEventListener('pointerdown', e => {
+                if (aiPanel.classList.contains('max')) return;
+                on = true; sx = e.clientX; sy = e.clientY;
+                const cur = aiPanelSize(); sw = cur.w; sh = cur.h;
+                aiPanel.classList.add('resizing');
+                try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+                e.preventDefault();
+            });
+            grip.addEventListener('pointermove', e => {
+                if (!on) return;
+                // 個框釘住右下角，所以向左上拉 = 變大
+                const w = Math.max(300, Math.min(window.innerWidth - 24, sw + (sx - e.clientX)));
+                const h = Math.max(320, Math.min(window.innerHeight - 24, sh + (sy - e.clientY)));
+                aiPanel.style.width = w + 'px';
+                aiPanel.style.height = h + 'px';
+            });
+            function end(e) {
+                if (!on) return;
+                on = false; aiPanel.classList.remove('resizing');
+                try { grip.releasePointerCapture(e.pointerId); } catch (err) {}
+                aiSaveSize({ max: false });
+            }
+            grip.addEventListener('pointerup', end);
+            grip.addEventListener('pointercancel', end);
+        })();
+
+        /* ---------- Token 計算 ---------- */
+        let aiTotalIn = 0, aiTotalOut = 0, aiTotalEst = false;
+        // 冇 usage 回傳嗰陣用嘅粗略估算：中日韓字約 1 個 token，其餘約 4 個字母 1 個
+        function aiEstTokens(str) {
+            if (!str) return 0;
+            const cjk = (str.match(/[\u3400-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]/g) || []).length;
+            return Math.round(cjk + (str.length - cjk) / 4);
+        }
+        function aiFmt(n) { return n.toLocaleString('en-US'); }
+        function aiShort(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n); }
+        function aiAddTotals(inTok, outTok, est) {
+            aiTotalIn += inTok; aiTotalOut += outTok; if (est) aiTotalEst = true;
+            const el = document.getElementById('aiTotalTok');
+            el.textContent = (aiTotalIn || aiTotalOut)
+                ? `本次對話累計 ↑${aiShort(aiTotalIn)} ↓${aiShort(aiTotalOut)}${aiTotalEst ? '（含估算）' : ''}` : '';
+        }
 
         // ---------- 本頁內容 ----------
         function aiPageContext() {
@@ -1255,7 +1384,7 @@
         }
         function aiUpdateCtxInfo() {
             const ctx = aiPageContext();
-            aiCtxInfo.textContent = `📄 已讀取本頁 ${ctx.len} 字${ctx.truncated ? '（太長，已截斷）' : ''}`
+            aiCtxInfo.textContent = `📄 本頁 ${ctx.len} 字${ctx.truncated ? '（已截斷）' : ''}`
                 + (aiCfgOK() ? `　·　${aiCfg.model}` : '　·　⚠️ 未設定 API');
         }
 
@@ -1301,6 +1430,115 @@
             h = h.replace(/\u0000CB(\d+)\u0000/g, (m, i) => '<pre><code>' + blocks[+i] + '</code></pre>');
             return h;
         }
+        /* ===== 複製格式轉換 =====
+           Model 出嚟嘅係 Markdown 原文（**粗體**、# 標題、- 列點）。
+           直接 copy 貼落文章或者 Word，就會見到一堆星星，所以要按目的地轉一轉：
+             rich  → text/html（貼入文章方格、Word、Gmail 會變真格式）
+             wa    → WhatsApp 嗰套（*粗體*、_斜體_、• 列點）
+             plain → 乜符號都清走
+             md    → 原封不動
+        */
+        function aiInlineHtml(t) {
+            let h = aiEscape(t); const codes = [];
+            h = h.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0001' + (codes.length - 1) + '\u0001'; });
+            h = h.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+            h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+            h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+            return h.replace(/\u0001(\d+)\u0001/g, (m, i) =>
+                '<code style="font-family:Consolas,Menlo,monospace;background:#f1f3f7;padding:1px 4px;border-radius:3px">' + codes[+i] + '</code>');
+        }
+        function aiInlineWa(t) {
+            let x = t; const codes = [];
+            x = x.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0001' + (codes.length - 1) + '\u0001'; });
+            x = x.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
+            // ⚠ 要先收起粗體先至轉斜體：唔係嘅話 **粗體** 變咗 *粗體* 之後，
+            // 會即刻俾下面條斜體 regex 再食一次，變埋 _粗體_。
+            const bolds = [];
+            x = x.replace(/\*\*([^*]+)\*\*/g, (m, b) => { bolds.push(b); return '\u0002' + (bolds.length - 1) + '\u0002'; });
+            x = x.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1_$2_');   // 斜體係底線
+            x = x.replace(/\u0002(\d+)\u0002/g, (m, i) => '*' + bolds[+i] + '*');   // WhatsApp 粗體係單星
+            x = x.replace(/~~([^~]+)~~/g, '~$1~');
+            return x.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+        }
+        function aiInlinePlain(t) {
+            return t.replace(/`([^`]+)`/g, '$1')
+                    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1（$2）')
+                    .replace(/\*\*([^*]+)\*\*/g, '$1')
+                    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
+                    .replace(/~~([^~]+)~~/g, '$1');
+        }
+        function aiConvert(md, mode) {
+            const lines = String(md || '').replace(/\r/g, '').split('\n');
+            const inline = mode === 'html' ? aiInlineHtml : (mode === 'wa' ? aiInlineWa : aiInlinePlain);
+            const out = []; let inCode = false, code = [], list = null;
+            function closeList() { if (list) { if (mode === 'html') out.push('</' + list + '>'); list = null; } }
+            function flushCode() {
+                if (mode === 'html') out.push('<pre style="background:#f1f3f7;padding:10px;border-radius:6px;font-family:Consolas,Menlo,monospace;font-size:13px">' + aiEscape(code.join('\n')) + '</pre>');
+                else if (mode === 'wa') out.push('```\n' + code.join('\n') + '\n```');
+                else out.push(code.join('\n'));
+                code = [];
+            }
+            for (const line of lines) {
+                if (/^\s*```/.test(line)) {
+                    if (inCode) { flushCode(); inCode = false; } else { closeList(); inCode = true; }
+                    continue;
+                }
+                if (inCode) { code.push(line); continue; }
+                if (!line.trim()) { closeList(); if (mode !== 'html') out.push(''); continue; }
+                const h = line.match(/^(#{1,6})\s+(.*)$/);
+                if (h) {
+                    closeList();
+                    if (mode === 'html') { const lv = Math.min(4, h[1].length + 1); out.push('<h' + lv + '>' + inline(h[2]) + '</h' + lv + '>'); }
+                    else if (mode === 'wa') out.push('*' + inline(h[2]) + '*');
+                    else out.push(inline(h[2]));
+                    continue;
+                }
+                const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+                const ol = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+                if (ul || ol) {
+                    const want = ul ? 'ul' : 'ol';
+                    const txt = ul ? ul[1] : ol[2];
+                    if (mode === 'html') {
+                        if (list && list !== want) closeList();
+                        if (!list) { out.push('<' + want + '>'); list = want; }
+                        out.push('<li>' + inline(txt) + '</li>');
+                    } else out.push((ul ? '• ' : (ol[1] + '. ')) + inline(txt));
+                    continue;
+                }
+                closeList();
+                out.push(mode === 'html' ? '<p>' + inline(line) + '</p>' : inline(line));
+            }
+            if (inCode && code.length) flushCode();
+            closeList();
+            let res = out.join(mode === 'html' ? '' : '\n');
+            if (mode !== 'html') res = res.replace(/\n{3,}/g, '\n\n').trim();
+            return res;
+        }
+        async function aiCopyAs(md, fmt) {
+            try {
+                if (fmt === 'rich') {
+                    const html = aiConvert(md, 'html'), plain = aiConvert(md, 'plain');
+                    if (navigator.clipboard && window.ClipboardItem) {
+                        // 同時放 HTML 同純文字：識讀 HTML 嘅（文章方格、Word、Gmail）攞格式，
+                        // 淨係收純文字嘅（記事本）都唔會見到一堆星星
+                        await navigator.clipboard.write([new ClipboardItem({
+                            'text/html': new Blob([html], { type: 'text/html' }),
+                            'text/plain': new Blob([plain], { type: 'text/plain' })
+                        })]);
+                    } else {
+                        await navigator.clipboard.writeText(plain);
+                    }
+                } else {
+                    await navigator.clipboard.writeText(fmt === 'md' ? md : aiConvert(md, fmt));
+                }
+                return true;
+            } catch (e) {
+                try { await navigator.clipboard.writeText(aiConvert(md, 'plain')); return true; }
+                catch (e2) { toast('❌ 複製失敗（瀏覽器唔俾權限，要 https）', true); return false; }
+            }
+        }
+
         function aiScroll() { aiMsgs.scrollTop = aiMsgs.scrollHeight; }
         function aiNote(msg, isErr) {
             const n = document.createElement('div');
@@ -1318,6 +1556,51 @@
             };
             return b;
         }
+        // 主掣一撳就係「有格式」（最常用：貼返入文章方格或者 Word）；▾ 可以揀其他格式
+        function aiCopyMenu(getMd) {
+            const wrap = document.createElement('span'); wrap.className = 'ai-copy-wrap';
+            const main = document.createElement('button');
+            main.className = 'ai-copy'; main.type = 'button'; main.innerHTML = '📋';
+            main.title = '複製（有格式，可以直接貼入文章方格 / Word）';
+            const caret = document.createElement('button');
+            caret.className = 'ai-copy ai-copy-caret'; caret.type = 'button'; caret.innerHTML = '▾';
+            caret.title = '揀複製格式';
+            const menu = document.createElement('div'); menu.className = 'ai-copy-menu';
+
+            const items = [
+                ['rich',  '📄 有格式',       '貼入文章方格、Word、Gmail：粗體／標題／列點會照樣出'],
+                ['wa',    '💬 WhatsApp 格式', '轉做 *粗體* _斜體_ • 列點，貼落 WhatsApp 啱晒'],
+                ['plain', '🅰️ 純文字',       '清走所有符號，淨係剩返文字'],
+                ['md',    '＃ Markdown 原文', '一個字都唔改，貼去支援 Markdown 嘅地方']
+            ];
+            items.forEach(([fmt, label, desc]) => {
+                const b = document.createElement('button'); b.type = 'button';
+                b.innerHTML = label + '<small>' + desc + '</small>';
+                b.onclick = async e => {
+                    e.stopPropagation();
+                    menu.classList.remove('open');
+                    if (await aiCopyAs(getMd(), fmt)) { main.innerHTML = '✅'; setTimeout(() => main.innerHTML = '📋', 1400); }
+                };
+                menu.appendChild(b);
+            });
+
+            main.onclick = async e => {
+                e.stopPropagation();
+                if (await aiCopyAs(getMd(), 'rich')) { main.innerHTML = '✅'; setTimeout(() => main.innerHTML = '📋', 1400); }
+            };
+            caret.onclick = e => {
+                e.stopPropagation();
+                const wasOpen = menu.classList.contains('open');
+                document.querySelectorAll('.ai-copy-menu.open').forEach(m => m.classList.remove('open'));
+                if (!wasOpen) menu.classList.add('open');
+            };
+            wrap.appendChild(main); wrap.appendChild(caret); wrap.appendChild(menu);
+            return wrap;
+        }
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.ai-copy-menu.open').forEach(m => m.classList.remove('open'));
+        });
+
         function aiAddUserMsg(text) {
             const w = document.createElement('div'); w.className = 'ai-msg user';
             const r = document.createElement('div'); r.className = 'ai-role';
@@ -1332,7 +1615,7 @@
             const r = document.createElement('div'); r.className = 'ai-role';
             r.appendChild(document.createTextNode('AI'));
             const w_ = w;
-            r.appendChild(aiCopyBtn(() => w_._answer || '', '複製 AI 嘅答案'));
+            r.appendChild(aiCopyMenu(() => w_._answer || ''));
             const think = document.createElement('div'); think.className = 'ai-think open'; think.style.display = 'none';
             const th = document.createElement('div'); th.className = 'ai-think-head';
             th.innerHTML = '<span class="caret">▾</span> 🧠 <span class="tlabel">思考中…</span>';
@@ -1391,7 +1674,7 @@
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder('utf-8');
-            let buf = '', finish = null, lastTick = Date.now();
+            let buf = '', finish = null, usage = null, lastTick = Date.now();
 
             const stall = setInterval(() => {
                 if (Date.now() - lastTick > AI_STALL_MS && aiAbort) aiAbort.abort();
@@ -1412,6 +1695,7 @@
                         if (payload === '[DONE]') continue;
                         let json;
                         try { json = JSON.parse(payload); } catch (e) { continue; }
+                        if (json.usage) usage = json.usage;   // 通常喺最後一個 chunk 度
                         const ch = json.choices && json.choices[0];
                         if (!ch) continue;
                         if (ch.finish_reason) finish = ch.finish_reason;
@@ -1440,7 +1724,7 @@
                 clearInterval(stall);
                 try { reader.cancel(); } catch (e) {}
             }
-            return finish;
+            return { finish, usage };
         }
 
         // ---------- 一問一答（連自動重試）----------
@@ -1460,7 +1744,8 @@
                 const messages = [{ role: 'system', content: aiSystemPrompt(ctx, strict) }]
                     .concat(aiHistory.slice(-12));   // 只帶最近幾轉，慳 token
                 try {
-                    const finish = await aiStream(messages, ui, strict);
+                    const out = await aiStream(messages, ui, strict);
+                    const finish = out.finish, usage = out.usage;
                     ui.wrap._answer = ui.wrap._answer || '（model 冇俾到內容）';
                     ui.bubble.innerHTML = aiMarkdown(ui.wrap._answer);
                     // 答完自動摺埋推理
@@ -1470,7 +1755,31 @@
                         ? `推理過程（${ui.wrap._reasoning.length} 字，撳我展開）` : '（今次冇推理內容）';
                     if (!ui.wrap._reasoning) ui.think.style.display = 'none';
                     aiHistory.push({ role: 'assistant', content: ui.wrap._answer });
-                    if (finish === 'length') aiNote('⚠️ 答案去到 max_tokens 上限被截斷。可以喺 ⚙️ 設定調高，或者問細啲。');
+
+                    // ---- 報返今次用咗幾多 token ----
+                    let inTok, outTok, est = false;
+                    if (usage && (usage.prompt_tokens || usage.completion_tokens)) {
+                        inTok = usage.prompt_tokens || 0;
+                        outTok = usage.completion_tokens || 0;
+                    } else {
+                        // 個 API 冇回 usage 就自己估
+                        inTok = aiEstTokens(messages.map(m => m.content).join('\n'));
+                        outTok = aiEstTokens(ui.wrap._reasoning + ui.wrap._answer);
+                        est = true;
+                    }
+                    const thinkTok = aiEstTokens(ui.wrap._reasoning);
+                    const u = document.createElement('div');
+                    u.className = 'ai-usage';
+                    u.innerHTML = `🔢 ${est ? '約' : ''}輸入 <b>${aiFmt(inTok)}</b>　·　${est ? '約' : ''}輸出 <b>${aiFmt(outTok)}</b>`
+                        + (ui.wrap._reasoning ? `（其中推理約 ${aiFmt(thinkTok)}）` : '')
+                        + `　·　合計 <b>${aiFmt(inTok + outTok)}</b>`
+                        + (usage && usage.prompt_tokens_details && usage.prompt_tokens_details.cached_tokens
+                            ? `　·　快取命中 ${aiFmt(usage.prompt_tokens_details.cached_tokens)}` : '')
+                        + (est ? '　<span title="個 API 今次冇回傳 usage，呢個係按字數估算">⚠️ 估算值</span>' : '');
+                    ui.wrap.appendChild(u);
+                    aiAddTotals(inTok, outTok, est);
+
+                    if (finish === 'length') aiNote('⚠️ 答案去到 max_tokens 上限被截斷（今次上限係 ' + aiFmt(aiCfg.maxTokens) + '）。可以喺最底嗰行調高再問一次。');
                     if (finish === 'sensitive') aiNote('⚠️ 內容被平台安全策略攔截。', true);
                     break;
                 } catch (err) {
@@ -1482,6 +1791,9 @@
                     }
                     if (err.name === 'LoopError' && attempt === 1) {
                         try { aiAbort.abort(); } catch (e) {}
+                        // 呢次雖然廢咗，但係啲 token 係真係燒咗嘅，照計入累計
+                        aiAddTotals(aiEstTokens(messages.map(m => m.content).join('\n')),
+                                    aiEstTokens(ui.wrap._reasoning + ui.wrap._answer), true);
                         aiNote('⚠️ 偵測到 AI 喺度不停重覆（「' + String(err.unit).trim().slice(0, 20) + '…」），已經刹停佢，自動重試一次…');
                         ui.wrap.remove();
                         ui = aiAddAssistantMsg();
@@ -1489,6 +1801,8 @@
                     }
                     if (err.name === 'LoopError') {
                         try { aiAbort.abort(); } catch (e) {}
+                        aiAddTotals(aiEstTokens(messages.map(m => m.content).join('\n')),
+                                    aiEstTokens(ui.wrap._reasoning + ui.wrap._answer), true);
                         aiNote('❌ 重試之後仍然喺度打圈，已經停止。建議：換個問法／問細少少／喺 ⚙️ 設定將「思考深度」較做「關閉思考」再試。', true);
                         ui.wrap.remove();
                         aiHistory.pop();
@@ -1518,8 +1832,13 @@
         document.getElementById('aiSaveCfg').addEventListener('click', () => { aiSaveCfg(); aiUpdateCtxInfo(); });
         document.getElementById('aiClearBtn').addEventListener('click', () => {
             if (aiBusy) return;
-            aiHistory = []; aiMsgs.innerHTML = ''; aiNote('對話已清空。');
+            aiHistory = []; aiMsgs.innerHTML = '';
+            aiTotalIn = 0; aiTotalOut = 0; aiTotalEst = false;
+            document.getElementById('aiTotalTok').textContent = '';
+            aiNote('對話已清空。');
         });
+        // 底部嗰個上限係即揀即用，唔使入設定
+        document.getElementById('cfgMaxTokens').addEventListener('change', () => { aiSaveCfg(true); aiUpdateCtxInfo(); });
         aiStop.addEventListener('click', () => { if (aiAbort) { try { aiAbort.abort('user'); } catch (e) { aiAbort.abort(); } } });
         aiSend.addEventListener('click', () => {
             const q = aiInput.value.trim(); if (!q || aiBusy) return;
@@ -1534,6 +1853,7 @@
             aiInput.style.height = Math.min(110, aiInput.scrollHeight) + 'px';
         });
         aiLoadCfg();
+        aiApplySize();
 
     </script>
 </body>
