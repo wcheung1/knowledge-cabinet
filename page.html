@@ -14,10 +14,13 @@
         .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         
         .breadcrumbs { font-size: 14px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ecf0f1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #7f8c8d; }
-        .breadcrumbs a { color: #3498db; text-decoration: none; font-weight: bold; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; }
-        .breadcrumbs a:hover { text-decoration: underline; color: #2980b9; }
+        .breadcrumbs a { color: #3498db; text-decoration: none; font-weight: bold; max-width: 220px; white-space: nowrap; overflow: hidden;
+                         text-overflow: ellipsis; display: inline-block; vertical-align: middle; padding: 2px 7px; border-radius: 5px; transition: 0.15s; }
+        .breadcrumbs a:hover { text-decoration: underline; color: #1f6391; background: #eaf6ff; }
+        .breadcrumbs a::before { content: '↩ '; font-weight: normal; opacity: 0; margin-right: -8px; transition: 0.15s; }
+        .breadcrumbs a:hover::before { opacity: 0.75; margin-right: 0; }
         .breadcrumbs span.crumb-cat { color: #7f8c8d; font-weight: bold; max-width: 160px; }
-        .breadcrumbs span { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; font-weight: bold; color: #2c3e50; }
+        .breadcrumbs span { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; font-weight: bold; color: #2c3e50; }
 
         .nav-bar { margin-bottom: 20px; display: flex; justify-content: flex-end; align-items: center; }
         .private-badge { background: #fdf0ef; color: #c0392b; font-weight: bold; padding: 6px 10px; border-radius: 6px; font-size: 14px; margin-right: auto; }
@@ -553,6 +556,12 @@
             else auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(err => alert(err.message));
         });
 
+        // 標題存落雲端嗰陣係 innerHTML，可能夾住 <b> 之類，做 tooltip 之前要拆乾淨
+        function breadcrumbPlain(html) {
+            const d = document.createElement('div');
+            d.innerHTML = String(html == null ? '' : html);
+            return (d.textContent || '').trim();
+        }
         async function buildBreadcrumbs(currentId) {
             let pathChain = [];
             let current = currentId;
@@ -572,7 +581,7 @@
                 if (indexSnap.exists()) mainTitleText = indexSnap.val();
             } catch(e) { /* main_title 讀唔到就用預設 */ }
             
-            let html = `<a href="index.html" title="${mainTitleText}">${mainTitleText}</a>`;
+            let html = `<a href="index.html" title="返回總目錄：${escapeAttr(breadcrumbPlain(mainTitleText))}">${mainTitleText}</a>`;
 
             // 中間嗰層：呢篇文喺總目錄邊個大分類之下。
             // 分類名唔喺 page_parents 條鏈度（佢淨係 HTML 結構），所以 index.html
@@ -583,22 +592,30 @@
                     const catSnap = await db.ref((isPrivate ? 'private_page_categories' : 'page_categories') + '/' + pathChain[0]).once('value');
                     const catName = catSnap.exists() ? String(catSnap.val()).trim() : '';
                     if (catName) {
-                        const safe = escapeHTML(catName);
-                        html += ` &nbsp;❯&nbsp; <span class="crumb-cat" title="${safe}">📁 ${safe}</span>`;
+                        html += ` &nbsp;❯&nbsp; <span class="crumb-cat" title="${escapeAttr(catName)}">📁 ${escapeHTML(catName)}</span>`;
                     }
                 } catch (e) { /* 冇權限或者未部署規則，略過 */ }
             }
             
             for (let i = 0; i < pathChain.length; i++) {
                 const id = pathChain[i];
-                const tSnap = await db.ref(P_TITLES + '/' + id).once('value');
-                const titleText = tSnap.exists() ? tSnap.val() : "未命名頁面";
-                
+                let titleText, isFallback = false;
+                if (id === '⚠️循環') { titleText = '⚠️ 父層級兜圈'; }
+                else {
+                    const tSnap = await db.ref(P_TITLES + '/' + id).once('value');
+                    const val = tSnap.exists() ? String(tSnap.val()) : '';
+                    // 冇設文章總標題就顯示佢個 ID —— 好過幾個祖先全部叫「未命名頁面」，
+                    // 撳邊個都唔知去邊
+                    if (val.trim()) titleText = val;
+                    else { titleText = id; isFallback = true; }
+                }
+                const plain = escapeAttr(breadcrumbPlain(titleText));
+
                 html += ` &nbsp;❯&nbsp; `;
                 if (i === pathChain.length - 1) {
-                    html += `<span title="${titleText}">${titleText}</span>`;
+                    html += `<span title="${plain}（你而家喺呢度）">${titleText}</span>`;
                 } else {
-                    html += `<a href="${pageLink(id)}" title="${titleText}">${titleText}</a>`;
+                    html += `<a href="${pageLink(id)}" title="↩ 撳我返上去：${plain}${isFallback ? '（呢頁未設文章總標題，顯示緊佢嘅 ID）' : ''}">${titleText}</a>`;
                 }
             }
             breadcrumbsContainer.innerHTML = html;
@@ -873,6 +890,13 @@
         }
 
         function escapeHTML(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        // ⚠ escapeHTML 唔會處理引號，擺入 title="..." 會截斷個屬性（標題有個 " 就散晒）。
+        // 屬性值一律用呢個。
+        function escapeAttr(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
 
         async function pasteInto(el, opts) {
             const data = await readClipboard();
