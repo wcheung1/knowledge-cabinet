@@ -556,8 +556,11 @@
         async function buildBreadcrumbs(currentId) {
             let pathChain = [];
             let current = currentId;
-            
-            while(current && current !== 'index') {
+            const seen = new Set();   // 父層級如果不小心兜返個圈（A 嘅父係 B、B 嘅父係 A），
+                                      // 冇呢個保險條 while 會永遠行落去、成版當機
+            while (current && current !== 'index') {
+                if (seen.has(current) || pathChain.length > 50) { pathChain.unshift('⚠️循環'); break; }
+                seen.add(current);
                 pathChain.unshift(current);
                 const snap = await db.ref(P_PARENTS + '/' + current).once('value');
                 current = snap.val();

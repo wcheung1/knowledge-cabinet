@@ -9,30 +9,53 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         body { font-family: "Helvetica Neue", Arial, sans-serif; background-color: #2c3e50; padding: 20px; color: #fff; }
-        .container { max-width: 1000px; margin: 0 auto; background: #34495e; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .container { max-width: 1150px; margin: 0 auto; background: #34495e; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         h1 { text-align: center; color: #ecf0f1; border-bottom: 2px solid #7f8c8d; padding-bottom: 15px; }
-        .nav-bar { margin-bottom: 20px; }
+        .nav-bar { margin-bottom: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
         .nav-bar a { color: #3498db; text-decoration: none; font-weight: bold; font-size: 16px; }
-        
+        .summary { color: #bdc3c7; font-size: 13px; margin-left: auto; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #ecf0f1; color: #2c3e50; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #bdc3c7; }
-        th { background-color: #bdc3c7; font-weight: bold; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #bdc3c7; vertical-align: middle; }
+        th { background-color: #bdc3c7; font-weight: bold; font-size: 13px; }
         tr:hover { background-color: #d4eaf2; }
-        
-        .zone-tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        td { font-size: 13px; }
+
+        .zone-tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; white-space: nowrap; }
         .zone-public { background: #d6eaf8; color: #2471a3; }
         .zone-private { background: #fadbd8; color: #c0392b; }
-        
-        .btn-small { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-right: 5px; }
+        .parent-cell { background: #bdc3c7; padding: 2px 6px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+        .parent-none { background: #f5b7b1; color: #922b21; }
+        .in-dir { font-size: 12px; white-space: nowrap; }
+        .in-dir.no { color: #b9770e; font-weight: bold; }
+
+        .btn-small { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; margin-right: 4px; white-space: nowrap; }
         .btn-open { background: #3498db; color: white; text-decoration: none; }
         .btn-copy { background: #1abc9c; color: white; }
+        .btn-zone { background: #8e44ad; color: white; }
+        .btn-parent { background: #d35400; color: white; }
         .btn-del { background: #e74c3c; color: white; }
+
+        #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #1a252f; color: #fff; padding: 12px 18px;
+                 border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.35); z-index: 9999; max-width: 380px; }
+        #busy { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10000; align-items: center; justify-content: center; }
+        #busy .bx { background: #fff; color: #2c3e50; padding: 22px 30px; border-radius: 10px; font-weight: bold; }
+
+        #modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001; align-items: center; justify-content: center; }
+        #modal .mx { background: #fff; color: #2c3e50; padding: 24px; border-radius: 10px; width: min(480px, calc(100vw - 32px)); }
+        #modal h3 { margin: 0 0 8px; font-size: 17px; }
+        #modal p { font-size: 12.5px; color: #5d6d7e; line-height: 1.7; margin: 0 0 14px; }
+        #modal select { width: 100%; padding: 9px; border: 1px solid #cfd6dd; border-radius: 6px; font-size: 14px; font-family: inherit; }
+        #modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+        #modal button { border: none; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        #mOk { background: #27ae60; color: #fff; } #mCancel { background: #bdc3c7; color: #2c3e50; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="nav-bar">
             <a href="index.html">← 返回總目錄</a>
+            <span class="summary" id="summary"></span>
         </div>
         <h1>⚙️ 機櫃資料庫總覽 (Admin Dashboard)</h1>
         <p id="loadingMsg">檢查權限及載入資料中...</p>
@@ -44,12 +67,22 @@
                     <th>區域</th>
                     <th>頁面總標題</th>
                     <th>父層級 (來源)</th>
+                    <th>喺目錄</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody id="tableBody"></tbody>
         </table>
     </div>
+
+    <div id="toast"></div>
+    <div id="busy"><div class="bx">⏳ <span id="busyMsg">處理中…</span></div></div>
+    <div id="modal"><div class="mx">
+        <h3 id="mTitle"></h3>
+        <p id="mDesc"></p>
+        <select id="mSelect"></select>
+        <div class="row"><button id="mCancel">取消</button><button id="mOk">確定</button></div>
+    </div></div>
 
     <script>
         /* =========================================================
@@ -129,83 +162,350 @@
         const auth = firebase.auth();
         const ADMIN_EMAIL = "w.cheung815@gmail.com";
 
+        const toastEl = document.getElementById('toast');
+        const busyEl = document.getElementById('busy');
+        const busyMsg = document.getElementById('busyMsg');
+        let DATA = null;   // 一次過載晒返嚟嘅資料
+
+        function toast(msg, isErr) {
+            toastEl.innerHTML = msg;
+            toastEl.style.background = isErr ? '#922b21' : '#1a252f';
+            toastEl.style.display = 'block';
+            clearTimeout(toastEl._t);
+            toastEl._t = setTimeout(() => toastEl.style.display = 'none', 3800);
+        }
+        function busy(on, msg) { busyEl.style.display = on ? 'flex' : 'none'; if (msg) busyMsg.textContent = msg; }
+
+        function paths(zone) {
+            const p = zone === 'private' ? 'private_' : '';
+            return { pages: p + 'pages', titles: p + 'page_titles', parents: p + 'page_parents',
+                     index: zone === 'private' ? 'private_index_content' : 'index_content',
+                     cats:  zone === 'private' ? 'private_page_categories' : 'page_categories' };
+        }
+        function pageUrl(id, zone) { return 'page.html?id=' + id + (zone === 'private' ? '&zone=private' : ''); }
+
         auth.onAuthStateChanged(user => {
-            if (user && user.email === ADMIN_EMAIL) {
-                loadDashboardData();
-            } else {
-                document.body.innerHTML = "<h2 style='text-align:center; margin-top:50px; color:#e74c3c;'>🔒 權限不足，請從總目錄以 Admin 身份登入。</h2>";
-            }
+            if (user && user.email === ADMIN_EMAIL) loadDashboardData();
+            else document.body.innerHTML = "<h2 style='text-align:center; margin-top:50px; color:#e74c3c;'>🔒 權限不足，請從總目錄以 Admin 身份登入。</h2>";
         });
 
-        function pageUrl(id, zone) {
-            return 'page.html?id=' + id + (zone === 'private' ? '&zone=private' : '');
+        /* =================== 載入 =================== */
+        async function loadDashboardData() {
+            try {
+                const [pg, ti, pa, ppg, pti, ppa, idx, pidx] = await Promise.all([
+                    db.ref('pages').once('value'), db.ref('page_titles').once('value'), db.ref('page_parents').once('value'),
+                    db.ref('private_pages').once('value'), db.ref('private_page_titles').once('value'), db.ref('private_page_parents').once('value'),
+                    db.ref('index_content').once('value'), db.ref('private_index_content').once('value')
+                ]);
+                DATA = {
+                    public:  { pages: pg.val()  || {}, titles: ti.val()  || {}, parents: pa.val()  || {}, dir: idx.val()  || '' },
+                    private: { pages: ppg.val() || {}, titles: pti.val() || {}, parents: ppa.val() || {}, dir: pidx.val() || '' }
+                };
+                render();
+            } catch (err) {
+                document.getElementById('loadingMsg').style.display = 'block';
+                document.getElementById('loadingMsg').innerText =
+                    "載入失敗：" + err.message + "（如果係 permission denied，請確認 database rules 已加入 private_* 同 page_categories 路徑）";
+            }
         }
 
-        function loadDashboardData() {
+        // 一個區域入面所有出現過嘅 ID（pages / titles / parents 三張表夾埋，唔會漏咗啱啱開未寫過內容嗰啲）
+        function allIds(zone) {
+            const z = DATA[zone];
+            return [...new Set([].concat(Object.keys(z.pages), Object.keys(z.titles), Object.keys(z.parents)))].sort();
+        }
+        function dirDoc(zone) { return new DOMParser().parseFromString('<div id="root">' + DATA[zone].dir + '</div>', 'text/html'); }
+        function rootOf(doc) { return doc.getElementById('root') || doc.body; }
+        function linkItemOf(doc, id) {
+            return [...doc.querySelectorAll('.link-item')].find(it => {
+                const a = it.querySelector('a'); if (!a) return false;
+                try { return new URL(a.getAttribute('href'), window.location.href).searchParams.get('id') === id; }
+                catch (e) { return false; }
+            }) || null;
+        }
+
+        function render() {
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('pagesTable').style.display = 'table';
             const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            const counts = { public: 0, private: 0, orphan: 0, unlinked: 0 };
 
-            // 同時讀取公開區同私人區嘅 pages / titles / parents
-            Promise.all([
-                db.ref('pages').once('value'),
-                db.ref('page_titles').once('value'),
-                db.ref('page_parents').once('value'),
-                db.ref('private_pages').once('value'),
-                db.ref('private_page_titles').once('value'),
-                db.ref('private_page_parents').once('value')
-            ]).then(snapshots => {
-                const zones = [
-                    { zone: 'public',  pages: snapshots[0].val() || {}, titles: snapshots[1].val() || {}, parents: snapshots[2].val() || {} },
-                    { zone: 'private', pages: snapshots[3].val() || {}, titles: snapshots[4].val() || {}, parents: snapshots[5].val() || {} }
-                ];
-                
-                tbody.innerHTML = '';
-                zones.forEach(z => {
-                    for (let id in z.pages) {
-                        const title = z.titles[id] || '<span style="color:#7f8c8d;font-style:italic;">(未設定標題)</span>';
-                        const parent = z.parents[id] === 'index' ? '總目錄' : (z.parents[id] || '無 / 孤立');
-                        const zoneTag = z.zone === 'private'
-                            ? '<span class="zone-tag zone-private">🔒 私人</span>'
-                            : '<span class="zone-tag zone-public">🌐 公開</span>';
-                        
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><strong>${id}</strong></td>
-                            <td>${zoneTag}</td>
-                            <td>${title}</td>
-                            <td><span style="background:#bdc3c7; padding:2px 6px; border-radius:4px; font-size:12px;">${parent}</span></td>
-                            <td>
-                                <a href="${pageUrl(id, z.zone)}" target="_blank" class="btn-small btn-open">👁️ 開啟</a>
-                                <button class="btn-small btn-copy" onclick="copyLink('${id}', '${z.zone}')">🔗 複製</button>
-                                <button class="btn-small btn-del" onclick="deletePage('${id}', '${z.zone}')">🗑️ 刪除</button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    }
+            ['public', 'private'].forEach(zone => {
+                const z = DATA[zone];
+                const doc = dirDoc(zone);
+                allIds(zone).forEach(id => {
+                    counts[zone]++;
+                    const title = z.titles[id] || '<span style="color:#7f8c8d;font-style:italic;">(未設定標題)</span>';
+                    const rawParent = z.parents[id];
+                    if (!rawParent) counts.orphan++;
+                    const parent = rawParent === 'index' ? '總目錄' : (rawParent || '無 / 孤立');
+                    const linked = !!linkItemOf(doc, id);
+                    if (!linked) counts.unlinked++;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>${id}</strong></td>
+                        <td>${zone === 'private' ? '<span class="zone-tag zone-private">🔒 私人</span>' : '<span class="zone-tag zone-public">🌐 公開</span>'}</td>
+                        <td>${title}</td>
+                        <td><span class="parent-cell${rawParent ? '' : ' parent-none'}">${parent}</span></td>
+                        <td class="in-dir${linked ? '' : ' no'}">${linked ? '✅ 有連結' : '⚠️ 冇連結'}</td>
+                        <td>
+                            <a href="${pageUrl(id, zone)}" target="_blank" class="btn-small btn-open">👁️ 開啟</a>
+                            <button class="btn-small btn-copy">🔗 複製</button>
+                            <button class="btn-small btn-zone">${zone === 'private' ? '🌐 轉公開' : '🔒 轉私人'}</button>
+                            <button class="btn-small btn-parent">🧭 父層級</button>
+                            <button class="btn-small btn-del">🗑️ 刪除</button>
+                        </td>`;
+                    tr.querySelector('.btn-copy').onclick   = () => copyLink(id, zone);
+                    tr.querySelector('.btn-zone').onclick   = () => changeZone(id, zone);
+                    tr.querySelector('.btn-parent').onclick = () => setParent(id, zone);
+                    tr.querySelector('.btn-del').onclick    = () => deletePage(id, zone);
+                    tbody.appendChild(tr);
                 });
-            }).catch(err => {
-                document.getElementById('loadingMsg').style.display = 'block';
-                document.getElementById('loadingMsg').innerText = "載入失敗：" + err.message + "（如果係 permission denied，請確認 database rules 已加入 private_* 路徑）";
+            });
+
+            document.getElementById('summary').textContent =
+                `🌐 公開 ${counts.public} 頁　·　🔒 私人 ${counts.private} 頁　·　⚠️ 冇父層級 ${counts.orphan}　·　⚠️ 目錄冇連結 ${counts.unlinked}`;
+        }
+
+        /* ===================================================================
+           共用邏輯（同 index.html 拖曳嗰套一致，改一邊記得改埋另一邊）
+           =================================================================== */
+        function collectSubtree(rootId, zone) {
+            const parents = DATA[zone].parents;
+            const childrenOf = {};
+            Object.keys(parents).forEach(k => { const p = parents[k]; (childrenOf[p] = childrenOf[p] || []).push(k); });
+            const out = []; const queue = [rootId];
+            while (queue.length) {
+                const cur = queue.shift();
+                if (!cur || out.indexOf(cur) !== -1) continue;
+                out.push(cur);
+                (childrenOf[cur] || []).forEach(c => queue.push(c));
+            }
+            return out;
+        }
+        // 搬區之後，頁面內容入面指向子頁嘅連結都要跟住加／減 &zone=private
+        function rewriteZoneLinks(html, toPrivate, idSet) {
+            if (typeof html !== 'string' || !html) return html;
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.querySelectorAll('a[href*="page.html"]').forEach(a => {
+                let id = null;
+                try { id = new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); } catch (e) { return; }
+                if (!id || !idSet.has(id)) return;
+                a.setAttribute('href', 'page.html?id=' + id + (toPrivate ? '&zone=private' : ''));
+            });
+            return doc.body.innerHTML;
+        }
+        function categoryMapOf(doc) {
+            const map = {};
+            doc.querySelectorAll('.category').forEach(cat => {
+                const t = cat.querySelector('.cat-title');
+                const name = t ? t.textContent.trim() : '';
+                if (!name) return;
+                cat.querySelectorAll('.link-item').forEach(it => {
+                    const a = it.querySelector('a'); if (!a) return;
+                    try { const id = new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); if (id) map[id] = name; }
+                    catch (e) {}
+                });
+            });
+            return map;
+        }
+
+        /* ===================================================================
+           1️⃣ 手動將一頁由 公開 ↔ 私人（連子頁面一齊）
+           =================================================================== */
+        async function changeZone(id, fromZone) {
+            const toZone = fromZone === 'private' ? 'public' : 'private';
+            const toPrivate = toZone === 'private';
+            const ids = collectSubtree(id, fromZone);
+            const extra = ids.length - 1;
+
+            const msg = `將【${id}】由 ${fromZone === 'private' ? '🔒 私人區' : '🌐 公開區'} 搬去 ${toPrivate ? '🔒 私人區' : '🌐 公開區'}？\n`
+                + (extra > 0
+                    ? `\n佢下面仲有 ${extra} 個子頁面，會一齊搬（唔一齊搬嘅話，你以為收埋咗，但子頁面其實仲留喺原本嗰邊）。\n合共 ${ids.length} 頁。\n`
+                    : '\n（冇子頁面）\n')
+                + (toPrivate
+                    ? '\n⚠ 搬完之後舊連結會失效，只有你登入咗先睇得到。'
+                    : `\n⚠ 搬完之後呢 ${ids.length} 頁會變成任何人攞到連結都睇得到。`);
+            if (!confirm(msg + '\n\n確定？')) return;
+
+            try {
+                busy(true, '檢查中…');
+                const F = paths(fromZone), T = paths(toZone);
+                const idSet = new Set(ids);
+
+                // 目的地唔可以有同名 ID，唔係會蓋走人哋
+                for (const pid of ids) {
+                    const [a, b] = await Promise.all([
+                        db.ref(T.pages + '/' + pid).once('value'),
+                        db.ref(T.parents + '/' + pid).once('value')
+                    ]);
+                    if (a.exists() || b.exists()) throw new Error(`目的地已經有一個 ID「${pid}」，為安全起見停止搬遷。`);
+                }
+
+                busy(true, `搬緊 ${ids.length} 頁…`);
+                const z = DATA[fromZone];
+                const writes = [];
+                for (const pid of ids) {
+                    if (z.pages[pid]   !== undefined) writes.push(db.ref(T.pages   + '/' + pid).set(rewriteZoneLinks(z.pages[pid], toPrivate, idSet)));
+                    if (z.titles[pid]  !== undefined) writes.push(db.ref(T.titles  + '/' + pid).set(z.titles[pid]));
+                    if (z.parents[pid] !== undefined) writes.push(db.ref(T.parents + '/' + pid).set(z.parents[pid]));
+                }
+                await Promise.all(writes);   // 全部寫晒去新區先，至清舊區
+
+                const dels = [];
+                for (const pid of ids) {
+                    dels.push(db.ref(F.pages   + '/' + pid).remove());
+                    dels.push(db.ref(F.titles  + '/' + pid).remove());
+                    dels.push(db.ref(F.parents + '/' + pid).remove());
+                }
+                await Promise.all(dels);
+
+                // 目錄嗰條連結都要跟住搬，唔係舊區會留返個死 link、新區又搵唔到入口
+                busy(true, '更新總目錄…');
+                const fromDoc = dirDoc(fromZone), toDoc = dirDoc(toZone);
+                const item = linkItemOf(fromDoc, id);
+                let placed = '';
+                if (item) {
+                    item.remove();
+                    const a = item.querySelector('a');
+                    a.setAttribute('href', pageUrl(id, toZone));
+                    const txt = a.textContent.replace(/^🔒\s*/, '').trim();
+                    a.textContent = (toPrivate ? '🔒 ' : '') + txt;
+
+                    let list = toDoc.querySelector('.category .link-list');
+                    if (!list) {
+                        const div = toDoc.createElement('div');
+                        div.className = 'category';
+                        div.innerHTML = '<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title">未分類</span>'
+                            + '<button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>';
+                        rootOf(toDoc).appendChild(div);
+                        list = div.querySelector('.link-list');
+                        placed = '，新開咗個「未分類」分類擺住佢';
+                    } else {
+                        placed = '，擺咗喺第一個分類度';
+                    }
+                    list.appendChild(item);
+
+                    await Promise.all([
+                        db.ref(paths(fromZone).index).set(rootOf(fromDoc).innerHTML),
+                        db.ref(paths(toZone).index).set(rootOf(toDoc).innerHTML)
+                    ]);
+                    // 分類對照表係錦上添花，寫唔到唔應該當成失敗
+                    Promise.all([
+                        db.ref(paths(fromZone).cats).set(categoryMapOf(fromDoc)),
+                        db.ref(paths(toZone).cats).set(categoryMapOf(toDoc))
+                    ]).catch(() => toast('⚠️ 分類名對照表更新唔到（規則未部署？），其餘已完成', true));
+                } else {
+                    placed = '（佢本身冇喺目錄出現，搬完仍然要用連結入去）';
+                }
+
+                busy(false);
+                toast(`✅ 已將 ${ids.length} 頁搬去${toPrivate ? '🔒 私人區' : '🌐 公開區'}${placed}`);
+                await loadDashboardData();
+            } catch (err) {
+                busy(false);
+                alert('搬遷失敗：' + err.message + '\n\n請重新整理頁面睇返實際狀態。');
+                await loadDashboardData();
+            }
+        }
+
+        /* ===================================================================
+           2️⃣ 幫孤立頁面安排返個父層級
+           =================================================================== */
+        function openModal(title, descHtml, options, current) {
+            return new Promise(resolve => {
+                const m = document.getElementById('modal');
+                document.getElementById('mTitle').textContent = title;
+                document.getElementById('mDesc').innerHTML = descHtml;
+                const sel = document.getElementById('mSelect');
+                sel.innerHTML = '';
+                options.forEach(o => {
+                    const op = document.createElement('option');
+                    op.value = o.value; op.textContent = o.label;
+                    if (o.value === current) op.selected = true;
+                    sel.appendChild(op);
+                });
+                m.style.display = 'flex';
+                function done(v) {
+                    m.style.display = 'none';
+                    document.getElementById('mOk').onclick = null;
+                    document.getElementById('mCancel').onclick = null;
+                    resolve(v);
+                }
+                document.getElementById('mOk').onclick = () => done(sel.value);
+                document.getElementById('mCancel').onclick = () => done(null);
             });
         }
 
+        async function setParent(id, zone) {
+            const P = paths(zone);
+            // 唔可以揀自己或者自己嘅子孫做父，否則父子關係會兜成個圈，麵包屑會行唔完
+            const banned = collectSubtree(id, zone);
+            const opts = [
+                { value: 'index', label: '📚 總目錄（頂層文章）' },
+                { value: '__none__', label: '（清空 → 變成孤立頁面）' }
+            ];
+            allIds(zone).forEach(pid => {
+                if (banned.indexOf(pid) !== -1) return;
+                const t = DATA[zone].titles[pid];
+                opts.push({ value: pid, label: pid + (t ? '　—　' + t : '') });
+            });
+
+            const cur = DATA[zone].parents[id] || '__none__';
+            const picked = await openModal(
+                `設定「${id}」嘅父層級`,
+                '父層級決定兩樣嘢：①麵包屑導航嘅路徑；②跨區搬遷嗰陣，邊啲頁面要一齊跟住走。<br><br>'
+                + '<b>留意：</b>設定父層級<b>唔會</b>自動加返一條連結入目錄或者父頁面。'
+                + '想加返入總目錄，請去總目錄用分類標題旁邊嗰粒「🔗 連結舊文章」。<br><br>'
+                + '清單入面唔會有佢自己同佢嘅子孫（防止父子關係兜圈）。',
+                opts, cur);
+            if (picked === null) return;
+
+            try {
+                busy(true, '更新中…');
+                if (picked === '__none__') await db.ref(P.parents + '/' + id).remove();
+                else await db.ref(P.parents + '/' + id).set(picked);
+                busy(false);
+                toast(picked === '__none__' ? `已清走「${id}」嘅父層級` : `✅ 「${id}」嘅父層級設咗做「${picked}」`);
+                await loadDashboardData();
+            } catch (err) { busy(false); alert('更新失敗：' + err.message); }
+        }
+
+        /* =================== 其他 =================== */
         function copyLink(id, zone) {
             const url = window.location.origin + window.location.pathname.replace('admin-dashboard.html', '') + pageUrl(id, zone);
             navigator.clipboard.writeText(url).then(() => {
-                alert(zone === 'private' ? '已複製連結！（🔒 私人頁：其他人開唔到，只供自己用）' : '已複製連結！');
-            });
+                toast(zone === 'private' ? '已複製連結！（🔒 私人頁：其他人開唔到）' : '已複製連結！');
+            }).catch(() => alert('複製失敗，請手動複製：' + url));
         }
 
-        function deletePage(id, zone) {
-            const prefix = zone === 'private' ? 'private_' : '';
-            if(confirm(`⚠️ 極度危險：確定要徹底刪除 ${zone === 'private' ? '【私人區】' : '【公開區】'} Page ID [${id}] 嗎？\n刪除後無法復原！`)) {
-                db.ref(prefix + 'pages/' + id).remove();
-                db.ref(prefix + 'page_titles/' + id).remove();
-                db.ref(prefix + 'page_parents/' + id).remove();
-                alert('頁面已刪除！');
-                loadDashboardData(); // 重新整理表格
-            }
+        async function deletePage(id, zone) {
+            const kids = collectSubtree(id, zone).filter(x => x !== id);
+            if (!confirm(`⚠️ 極度危險：確定要徹底刪除 ${zone === 'private' ? '【私人區】' : '【公開區】'} Page ID [${id}] 嗎？\n`
+                + (kids.length ? `\n注意：佢下面仲有 ${kids.length} 個子頁面，佢哋【唔會】被刪，但會變成孤立頁面。\n` : '')
+                + '\n刪除後無法復原！')) return;
+            try {
+                busy(true, '刪除中…');
+                const P = paths(zone);
+                await Promise.all([
+                    db.ref(P.pages + '/' + id).remove(),
+                    db.ref(P.titles + '/' + id).remove(),
+                    db.ref(P.parents + '/' + id).remove()
+                ]);
+                // 順手清走目錄入面嗰條死連結（舊版會留低，撳落去入到一版空白頁）
+                const doc = dirDoc(zone);
+                const item = linkItemOf(doc, id);
+                if (item) {
+                    item.remove();
+                    await db.ref(P.index).set(rootOf(doc).innerHTML);
+                    db.ref(P.cats).set(categoryMapOf(doc)).catch(() => {});
+                }
+                busy(false);
+                toast('頁面已刪除' + (item ? '（連目錄嗰條連結一齊清走）' : ''));
+                await loadDashboardData();
+            } catch (err) { busy(false); alert('刪除失敗：' + err.message); }
         }
     </script>
 </body>
