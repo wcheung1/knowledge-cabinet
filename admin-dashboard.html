@@ -35,6 +35,11 @@
         .btn-zone { background: #8e44ad; color: white; }
         .btn-parent { background: #d35400; color: white; }
         .btn-del { background: #e74c3c; color: white; }
+        .btn-fix { background: #16a085; color: white; margin-top: 4px; }
+        .hint-multi { display: inline-block; margin-top: 4px; font-size: 11px; color: #7d6608; background: #fef9e7; padding: 1px 6px; border-radius: 4px; cursor: help; }
+        .hint-bad { display: inline-block; margin-top: 4px; font-size: 11px; color: #922b21; background: #fdedec; padding: 1px 6px; border-radius: 4px; cursor: help; font-weight: bold; }
+        #fixAllBtn { background: #16a085; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        #fixAllBtn:hover { background: #138d75; }
 
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #1a252f; color: #fff; padding: 12px 18px;
                  border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.35); z-index: 9999; max-width: 380px; }
@@ -55,6 +60,7 @@
     <div class="container">
         <div class="nav-bar">
             <a href="index.html">← 返回總目錄</a>
+            <button id="fixAllBtn" style="display:none;">🔧 一鍵補返父層級</button>
             <span class="summary" id="summary"></span>
         </div>
         <h1>⚙️ 機櫃資料庫總覽 (Admin Dashboard)</h1>
@@ -224,12 +230,56 @@
             }) || null;
         }
 
+        /* ===================================================================
+           偵測「實際上」嘅父層級
+           ---------------------------------------------------------------
+           page_parents 只係一張紀錄表，係可以同現實脫節嘅（舊資料、還原過舊備份、
+           寫入失敗、手動改過…）。真正嘅事實係：邊一頁嘅內容入面有一條 link 指住佢。
+           所以掃一次所有頁面內容 + 總目錄，砌返個反向索引出嚟做建議。
+           =================================================================== */
+        let LINKS = { public: {}, private: {} };   // zone → { 子頁ID: [父頁ID, ...] }
+
+        function idFromAnchor(a) {
+            try { return new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); }
+            catch (e) { return null; }
+        }
+        function buildLinkIndex() {
+            LINKS = { public: {}, private: {} };
+            ['public', 'private'].forEach(zone => {
+                const idx = {};
+                const push = (childId, parentId) => {
+                    if (!childId || childId === parentId) return;
+                    idx[childId] = idx[childId] || [];
+                    if (idx[childId].indexOf(parentId) === -1) idx[childId].push(parentId);
+                };
+                // (a) 總目錄有條 link 指住佢 → 實際父層級係「總目錄」
+                dirDoc(zone).querySelectorAll('.link-item a').forEach(a => push(idFromAnchor(a), 'index'));
+                // (b) 邊一頁嘅內容入面有 link 指住佢
+                const pages = DATA[zone].pages;
+                Object.keys(pages).forEach(pid => {
+                    const html = pages[pid];
+                    if (typeof html !== 'string' || html.indexOf('page.html') === -1) return;
+                    const pdoc = new DOMParser().parseFromString(html, 'text/html');
+                    pdoc.querySelectorAll('a[href*="page.html"]').forEach(a => push(idFromAnchor(a), pid));
+                });
+                LINKS[zone] = idx;
+            });
+        }
+        function detectedParents(id, zone) { return LINKS[zone][id] || []; }
+        // 喺另一個區域搵到 = 資料狀態有問題（多數係搬區搬到一半）
+        function detectedOtherZone(id, zone) {
+            const other = zone === 'private' ? 'public' : 'private';
+            return (LINKS[other][id] || []).length ? other : null;
+        }
+
         function render() {
             document.getElementById('loadingMsg').style.display = 'none';
             document.getElementById('pagesTable').style.display = 'table';
+            buildLinkIndex();
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
-            const counts = { public: 0, private: 0, orphan: 0, unlinked: 0 };
+            const counts = { public: 0, private: 0, orphan: 0, unlinked: 0, fixable: 0, mismatch: 0 };
+            FIXABLE = [];
 
             ['public', 'private'].forEach(zone => {
                 const z = DATA[zone];
@@ -243,12 +293,33 @@
                     const linked = !!linkItemOf(doc, id);
                     if (!linked) counts.unlinked++;
 
+                    // 實際上邊一頁 link 住佢？
+                    const det = detectedParents(id, zone);
+                    let hint = '';
+                    if (!rawParent && det.length === 1) {
+                        counts.fixable++;
+                        FIXABLE.push({ id, zone, parent: det[0] });
+                        hint = `<button class="btn-small btn-fix" data-id="${id}" data-zone="${zone}" data-parent="${det[0]}"
+                                 title="掃描過所有頁面內容，發現「${det[0] === 'index' ? '總目錄' : det[0]}」入面有一條 link 指住呢頁">
+                                 🔍 應該係 ${det[0] === 'index' ? '總目錄' : det[0]}，採用</button>`;
+                    } else if (!rawParent && det.length > 1) {
+                        hint = `<span class="hint-multi" title="有 ${det.length} 頁都 link 住佢：${det.join('、')}">🔍 偵測到 ${det.length} 個可能</span>`;
+                    } else if (!rawParent) {
+                        const other = detectedOtherZone(id, zone);
+                        hint = other
+                            ? `<span class="hint-multi" title="喺${other === 'private' ? '私人' : '公開'}區搵到有頁面 link 住佢，可能係之前搬區搬到一半">⚠️ 另一區有連結</span>`
+                            : `<span class="hint-multi" title="掃過所有頁面內容同總目錄，都冇任何地方 link 住呢頁">🔍 真係冇人 link 佢</span>`;
+                    } else if (det.length && det.indexOf(rawParent) === -1) {
+                        counts.mismatch++;
+                        hint = `<span class="hint-bad" title="紀錄寫住父層級係「${rawParent}」，但實際 link 住佢嘅係：${det.join('、')}">⚠️ 同實際唔夾</span>`;
+                    }
+
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td><strong>${id}</strong></td>
                         <td>${zone === 'private' ? '<span class="zone-tag zone-private">🔒 私人</span>' : '<span class="zone-tag zone-public">🌐 公開</span>'}</td>
                         <td>${title}</td>
-                        <td><span class="parent-cell${rawParent ? '' : ' parent-none'}">${parent}</span></td>
+                        <td><span class="parent-cell${rawParent ? '' : ' parent-none'}">${parent}</span>${hint ? '<br>' + hint : ''}</td>
                         <td class="in-dir${linked ? '' : ' no'}">${linked ? '✅ 有連結' : '⚠️ 冇連結'}</td>
                         <td>
                             <a href="${pageUrl(id, zone)}" target="_blank" class="btn-small btn-open">👁️ 開啟</a>
@@ -257,6 +328,8 @@
                             <button class="btn-small btn-parent">🧭 父層級</button>
                             <button class="btn-small btn-del">🗑️ 刪除</button>
                         </td>`;
+                    const fixBtn = tr.querySelector('.btn-fix');
+                    if (fixBtn) fixBtn.onclick = () => applyDetected(id, zone, fixBtn.dataset.parent);
                     tr.querySelector('.btn-copy').onclick   = () => copyLink(id, zone);
                     tr.querySelector('.btn-zone').onclick   = () => changeZone(id, zone);
                     tr.querySelector('.btn-parent').onclick = () => setParent(id, zone);
@@ -266,7 +339,11 @@
             });
 
             document.getElementById('summary').textContent =
-                `🌐 公開 ${counts.public} 頁　·　🔒 私人 ${counts.private} 頁　·　⚠️ 冇父層級 ${counts.orphan}　·　⚠️ 目錄冇連結 ${counts.unlinked}`;
+                `🌐 公開 ${counts.public} 頁　·　🔒 私人 ${counts.private} 頁　·　⚠️ 冇父層級 ${counts.orphan}`
+                + `　·　⚠️ 目錄冇連結 ${counts.unlinked}` + (counts.mismatch ? `　·　⚠️ 父層級同實際唔夾 ${counts.mismatch}` : '');
+            const fixBtn = document.getElementById('fixAllBtn');
+            fixBtn.style.display = counts.fixable ? 'inline-block' : 'none';
+            fixBtn.textContent = `🔧 一鍵補返 ${counts.fixable} 個孤立頁嘅父層級`;
         }
 
         /* ===================================================================
@@ -411,6 +488,36 @@
             }
         }
 
+        let FIXABLE = [];   // 孤立、但偵測到剛好一個父嘅頁面
+
+        async function applyDetected(id, zone, parent) {
+            if (!confirm(`將「${id}」嘅父層級設做「${parent === 'index' ? '總目錄' : parent}」？\n\n`
+                + `（呢個係掃描所有頁面內容之後搵到嘅：${parent === 'index' ? '總目錄' : '「' + parent + '」'}入面有一條 link 指住呢頁。）`)) return;
+            try {
+                busy(true, '更新中…');
+                await db.ref(paths(zone).parents + '/' + id).set(parent);
+                busy(false);
+                toast(`✅ 「${id}」嘅父層級補返做「${parent === 'index' ? '總目錄' : parent}」`);
+                await loadDashboardData();
+            } catch (err) { busy(false); alert('更新失敗：' + err.message); }
+        }
+
+        document.getElementById('fixAllBtn').onclick = async () => {
+            if (!FIXABLE.length) return;
+            const list = FIXABLE.slice(0, 25).map(x => `· ${x.id} → ${x.parent === 'index' ? '總目錄' : x.parent}`).join('\n');
+            if (!confirm(`偵測到 ${FIXABLE.length} 個孤立頁面，其實有頁面 link 住佢哋。\n一次過補返佢哋嘅父層級？\n\n`
+                + list + (FIXABLE.length > 25 ? `\n…（仲有 ${FIXABLE.length - 25} 個）` : '')
+                + '\n\n只會改父層級紀錄，唔會郁你任何文章內容。')) return;
+            try {
+                busy(true, `修復緊 ${FIXABLE.length} 個…`);
+                await Promise.all(FIXABLE.map(x => db.ref(paths(x.zone).parents + '/' + x.id).set(x.parent)));
+                const n = FIXABLE.length;
+                busy(false);
+                toast(`✅ 已補返 ${n} 個頁面嘅父層級`);
+                await loadDashboardData();
+            } catch (err) { busy(false); alert('修復失敗：' + err.message); }
+        };
+
         /* ===================================================================
            2️⃣ 幫孤立頁面安排返個父層級
            =================================================================== */
@@ -443,20 +550,46 @@
             const P = paths(zone);
             // 唔可以揀自己或者自己嘅子孫做父，否則父子關係會兜成個圈，麵包屑會行唔完
             const banned = collectSubtree(id, zone);
-            const opts = [
-                { value: 'index', label: '📚 總目錄（頂層文章）' },
-                { value: '__none__', label: '（清空 → 變成孤立頁面）' }
-            ];
-            allIds(zone).forEach(pid => {
+            const det = detectedParents(id, zone);   // 掃描內容搵返嚟嘅「實際」父層級
+            const opts = [];
+            // 偵測到嘅排最前，標個 🔍
+            det.forEach(pid => {
                 if (banned.indexOf(pid) !== -1) return;
+                const t = pid === 'index' ? '總目錄（頂層文章）' : (DATA[zone].titles[pid] || '');
+                opts.push({ value: pid, label: `🔍 偵測到：${pid === 'index' ? '📚 總目錄' : pid}${t && pid !== 'index' ? '　—　' + t : ''}` });
+            });
+            if (det.indexOf('index') === -1) opts.push({ value: 'index', label: '📚 總目錄（頂層文章）' });
+            opts.push({ value: '__none__', label: '（清空 → 變成孤立頁面）' });
+            allIds(zone).forEach(pid => {
+                if (banned.indexOf(pid) !== -1 || det.indexOf(pid) !== -1) return;
                 const t = DATA[zone].titles[pid];
                 opts.push({ value: pid, label: pid + (t ? '　—　' + t : '') });
             });
 
-            const cur = DATA[zone].parents[id] || '__none__';
+            const recorded = DATA[zone].parents[id];
+            // 冇紀錄就預先幫你揀返偵測到嗰個
+            const cur = recorded || (det.length === 1 ? det[0] : '__none__');
+            let detLine = '';
+            if (det.length === 1) {
+                detLine = `<div style="background:#e8f8f5;border-left:4px solid #16a085;padding:8px 10px;border-radius:4px;margin-bottom:12px;">`
+                    + `🔍 <b>偵測結果：</b>${det[0] === 'index' ? '總目錄' : '「' + det[0] + '」'} 入面有一條 link 指住呢頁，`
+                    + `所以佢實際上應該係${det[0] === 'index' ? '一篇頂層文章' : '嗰頁嘅子頁面'}。已經幫你預先揀咗。</div>`;
+            } else if (det.length > 1) {
+                detLine = `<div style="background:#fef9e7;border-left:4px solid #f39c12;padding:8px 10px;border-radius:4px;margin-bottom:12px;">`
+                    + `🔍 <b>偵測到 ${det.length} 個地方</b>都有 link 指住呢頁：${det.map(x => x === 'index' ? '總目錄' : x).join('、')}。請自己揀一個做父層級。</div>`;
+            } else {
+                const other = detectedOtherZone(id, zone);
+                detLine = other
+                    ? `<div style="background:#fdedec;border-left:4px solid #e74c3c;padding:8px 10px;border-radius:4px;margin-bottom:12px;">`
+                      + `⚠️ 呢個區域冇任何頁面 link 住佢，但<b>${other === 'private' ? '私人' : '公開'}區</b>有 —— 好可能係之前搬區搬到一半，建議查返。</div>`
+                    : `<div style="background:#f4f6f7;border-left:4px solid #95a5a6;padding:8px 10px;border-radius:4px;margin-bottom:12px;">`
+                      + `🔍 掃描過所有頁面內容同總目錄，都冇任何地方 link 住呢頁，所以估唔到佢原本嘅父層級。</div>`;
+            }
+
             const picked = await openModal(
                 `設定「${id}」嘅父層級`,
-                '父層級決定兩樣嘢：①麵包屑導航嘅路徑；②跨區搬遷嗰陣，邊啲頁面要一齊跟住走。<br><br>'
+                detLine
+                + '父層級決定兩樣嘢：①麵包屑導航嘅路徑；②跨區搬遷嗰陣，邊啲頁面要一齊跟住走。<br><br>'
                 + '<b>留意：</b>設定父層級<b>唔會</b>自動加返一條連結入目錄或者父頁面。'
                 + '想加返入總目錄，請去總目錄用分類標題旁邊嗰粒「🔗 連結舊文章」。<br><br>'
                 + '清單入面唔會有佢自己同佢嘅子孫（防止父子關係兜圈）。',
