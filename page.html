@@ -51,6 +51,15 @@
         .box-content { display: none; padding: 20px; border-top: 1px solid #ecf0f1; }
         .box.active .box-content { display: block; }
         .box-content a { color: #e74c3c; font-weight: bold; text-decoration: underline; cursor: pointer; background: #fdf2f1; padding: 2px 6px; border-radius: 4px; }
+        /* 由 Markdown 轉出嚟嘅結構，喺方格入面嘅樣 */
+        .box-content h2, .box-content h3, .box-content h4 { margin: 16px 0 6px; line-height: 1.4; color: #2c3e50; }
+        .box-content h2 { font-size: 20px; } .box-content h3 { font-size: 17px; } .box-content h4 { font-size: 15px; }
+        .box-content ul, .box-content ol { margin: 6px 0; padding-left: 26px; }
+        .box-content li { margin: 4px 0; }
+        .box-content li > ul, .box-content li > ol { margin: 4px 0; }
+        .box-content hr { border: none; border-top: 1px solid #e1e6ea; margin: 16px 0; }
+        .box-content blockquote { margin: 8px 0; padding: 4px 14px; border-left: 3px solid #d4dbe0; color: #5d6d7e; }
+        .box-content p { margin: 8px 0; }
 
         /* ===== 編輯模式：預設全部縮埋，單擊標題先展開 =====
            用 #mainContainer 提升權重，蓋過 .box.active 嗰條規則。
@@ -901,9 +910,31 @@
         async function pasteInto(el, opts) {
             const data = await readClipboard();
             if (!data) { toast('❌ 讀唔到剪貼簿，請雙擊入去用 Ctrl+V', true); return; }
-            let incoming = (opts.plainOnly || !data.html)
-                ? escapeHTML((data.text || '').trim()).replace(/\n/g, opts.plainOnly ? ' ' : '<br>')
-                : sanitizeHTML(data.html);
+
+            const text = (data.text || '').trim();
+            let incoming, converted = false;
+
+            if (opts.plainOnly) {
+                // 標題唔要任何 tag：有 Markdown 符號就直接剝走佢哋
+                const t = looksLikeMarkdown(text) ? aiConvert(text, 'plain') : text;
+                incoming = escapeHTML(t).replace(/\n/g, ' ');
+            } else {
+                const cleanHtml = data.html ? sanitizeHTML(data.html) : '';
+                // 剪貼簿嗰份 HTML 有冇真格式？（由純文字複製出嚟嗰啲，多數係一堆 span，冇 tag）
+                const hasRealTags = /<(strong|b|em|i|h[1-6]|ul|ol|li|table|pre|blockquote)\b/i.test(cleanHtml);
+                // 決定用邊個版本：
+                //  · 文字入面有 **粗體** / # 標題 / ``` → 一定係 Markdown 原始碼，轉佢
+                //  · 冇真格式 tag 而又似 Markdown → 都轉
+                //  · 其餘就用返 HTML（例如由 Word、網頁複製過嚟嗰啲真格式）
+                if (strongMarkdown(text) || (!hasRealTags && looksLikeMarkdown(text))) {
+                    incoming = aiConvert(text, 'html');
+                    converted = true;
+                } else if (cleanHtml.trim()) {
+                    incoming = cleanHtml;
+                } else {
+                    incoming = escapeHTML(text).replace(/\n/g, '<br>');
+                }
+            }
             if (!incoming.trim()) { toast('剪貼簿係空嘅', true); return; }
 
             flushTyping();
@@ -915,7 +946,9 @@
                 el.innerHTML = incoming;
             }
             markDirty(); commit();
-            toast('✅ 已貼上（撳錯咗可以 Ctrl+Z）');
+            toast(converted
+                ? '✅ 已貼上，順手將 Markdown 符號轉成真格式（唔啱可以 Ctrl+Z）'
+                : '✅ 已貼上（撳錯咗可以 Ctrl+Z）');
         }
 
         /* ===================================================================
@@ -1473,19 +1506,6 @@ ctx.text,
 
         // ---------- 畫面 ----------
         function aiEscape(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-        // 好輕量嘅 markdown：一定要先 escape，之後先至加返 tag，唔驚 API 回傳嘅嘢帶 HTML
-        function aiMarkdown(src) {
-            let h = aiEscape(src);
-            const blocks = [];
-            h = h.replace(/```([\s\S]*?)```/g, (m, code) => { blocks.push(code.replace(/^\w*\n/, '')); return '\u0000CB' + (blocks.length - 1) + '\u0000'; });
-            h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-            h = h.replace(/^#{1,6}\s*(.+)$/gm, '<h3>$1</h3>');
-            h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-            h = h.replace(/^\s*[-*]\s+(.+)$/gm, '<li>$1</li>');
-            h = h.replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, '<ul>$1</ul>');
-            h = h.replace(/\u0000CB(\d+)\u0000/g, (m, i) => '<pre><code>' + blocks[+i] + '</code></pre>');
-            return h;
-        }
         /* ===== 複製格式轉換 =====
            Model 出嚟嘅係 Markdown 原文（**粗體**、# 標題、- 列點）。
            直接 copy 貼落文章或者 Word，就會見到一堆星星，所以要按目的地轉一轉：
@@ -1527,50 +1547,114 @@ ctx.text,
         function aiConvert(md, mode) {
             const lines = String(md || '').replace(/\r/g, '').split('\n');
             const inline = mode === 'html' ? aiInlineHtml : (mode === 'wa' ? aiInlineWa : aiInlinePlain);
-            const out = []; let inCode = false, code = [], list = null;
-            function closeList() { if (list) { if (mode === 'html') out.push('</' + list + '>'); list = null; } }
+            const out = [];
+            let inCode = false, code = [];
+            const stack = [];   // 巢狀清單：[{tag:'ul'|'ol', indent:縮排空格數}]
+
+            function closeLists(toIndent) {
+                while (stack.length && stack[stack.length - 1].indent > toIndent) {
+                    const top = stack.pop();
+                    // 收返個 </li>：巢狀清單應該擺喺上一個 <li> 入面，唔係做佢隔籬
+                    if (mode === 'html') out.push('</' + top.tag + '>' + (top.insideLi ? '</li>' : ''));
+                }
+            }
+            function closeAllLists() { closeLists(-1); }
             function flushCode() {
-                if (mode === 'html') out.push('<pre style="background:#f1f3f7;padding:10px;border-radius:6px;font-family:Consolas,Menlo,monospace;font-size:13px">' + aiEscape(code.join('\n')) + '</pre>');
+                if (mode === 'html') out.push('<pre style="background:#f1f3f7;padding:10px;border-radius:6px;font-family:Consolas,Menlo,monospace;font-size:13px;white-space:pre-wrap">' + aiEscape(code.join('\n')) + '</pre>');
                 else if (mode === 'wa') out.push('```\n' + code.join('\n') + '\n```');
                 else out.push(code.join('\n'));
                 code = [];
             }
+
             for (const line of lines) {
                 if (/^\s*```/.test(line)) {
-                    if (inCode) { flushCode(); inCode = false; } else { closeList(); inCode = true; }
+                    if (inCode) { flushCode(); inCode = false; } else { closeAllLists(); inCode = true; }
                     continue;
                 }
                 if (inCode) { code.push(line); continue; }
-                if (!line.trim()) { closeList(); if (mode !== 'html') out.push(''); continue; }
-                const h = line.match(/^(#{1,6})\s+(.*)$/);
+                if (!line.trim()) { closeAllLists(); if (mode !== 'html') out.push(''); continue; }
+
+                // 分隔線 --- / *** / ___
+                if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
+                    closeAllLists();
+                    out.push(mode === 'html' ? '<hr>' : '────────');
+                    continue;
+                }
+                // 標題 # ~ ######
+                const h = line.match(/^\s*(#{1,6})\s+(.*)$/);
                 if (h) {
-                    closeList();
+                    closeAllLists();
                     if (mode === 'html') { const lv = Math.min(4, h[1].length + 1); out.push('<h' + lv + '>' + inline(h[2]) + '</h' + lv + '>'); }
                     else if (mode === 'wa') out.push('*' + inline(h[2]) + '*');
                     else out.push(inline(h[2]));
                     continue;
                 }
-                const ul = line.match(/^\s*[-*+]\s+(.*)$/);
-                const ol = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
-                if (ul || ol) {
-                    const want = ul ? 'ul' : 'ol';
-                    const txt = ul ? ul[1] : ol[2];
-                    if (mode === 'html') {
-                        if (list && list !== want) closeList();
-                        if (!list) { out.push('<' + want + '>'); list = want; }
-                        out.push('<li>' + inline(txt) + '</li>');
-                    } else out.push((ul ? '• ' : (ol[1] + '. ')) + inline(txt));
+                // 引言 >
+                const bq = line.match(/^\s*>\s?(.*)$/);
+                if (bq) {
+                    closeAllLists();
+                    out.push(mode === 'html' ? '<blockquote>' + inline(bq[1]) + '</blockquote>' : '> ' + inline(bq[1]));
                     continue;
                 }
-                closeList();
+                // 清單（支援縮排巢狀）
+                const ul = line.match(/^([ \t]*)[-*+]\s+(.*)$/);
+                const ol = line.match(/^([ \t]*)(\d+)[.)]\s+(.*)$/);
+                if (ul || ol) {
+                    const rawIndent = (ul ? ul[1] : ol[1]).replace(/\t/g, '    ');
+                    const indent = rawIndent.length;
+                    const want = ul ? 'ul' : 'ol';
+                    const txt = ul ? ul[2] : ol[3];
+                    if (mode === 'html') {
+                        closeLists(indent);
+                        const top = stack[stack.length - 1];
+                        if (!top || top.indent < indent) {
+                            let insideLi = false;
+                            if (stack.length && out.length && /<\/li>$/.test(out[out.length - 1])) {
+                                out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, '');
+                                insideLi = true;   // 呢個子清單係包喺上一個 <li> 入面
+                            }
+                            out.push('<' + want + '>');
+                            stack.push({ tag: want, indent: indent, insideLi: insideLi });
+                        }
+                        else if (top.tag !== want) {
+                            out.push('</' + top.tag + '>' + (top.insideLi ? '</li>' : ''));
+                            stack.pop();
+                            out.push('<' + want + '>');
+                            stack.push({ tag: want, indent: indent, insideLi: false });
+                        }
+                        out.push('<li>' + inline(txt) + '</li>');
+                    } else {
+                        const pad = '　'.repeat(Math.min(3, Math.floor(indent / 2)));
+                        out.push(pad + (ul ? '• ' : (ol[2] + '. ')) + inline(txt));
+                    }
+                    continue;
+                }
+                closeAllLists();
                 out.push(mode === 'html' ? '<p>' + inline(line) + '</p>' : inline(line));
             }
             if (inCode && code.length) flushCode();
-            closeList();
+            closeAllLists();
             let res = out.join(mode === 'html' ? '' : '\n');
             if (mode !== 'html') res = res.replace(/\n{3,}/g, '\n\n').trim();
             return res;
         }
+
+        /* ---- 貼上嘅時候，認唔認得出啲 Markdown 符號 ---- */
+        function looksLikeMarkdown(t) {
+            if (!t) return false;
+            return /\*\*[^*\n]+\*\*/.test(t)              // **粗體**
+                || /^\s*#{1,6}\s+\S/m.test(t)             // # 標題
+                || /^[ \t]*[-*+]\s+\S/m.test(t)           // - 列點
+                || /^[ \t]*\d+[.)]\s+\S/m.test(t)         // 1. 編號
+                || /```/.test(t)                          // 程式碼區塊
+                || /^\s*>\s+\S/m.test(t)                  // > 引言
+                || /\[[^\]]+\]\([^)\s]+\)/.test(t);       // [文字](網址)
+        }
+        // 呢幾種符號幾乎唔會喺「已經有格式」嘅內容度出現，見到就當佢係 Markdown 原始碼
+        function strongMarkdown(t) {
+            return !!t && (/\*\*[^*\n]+\*\*/.test(t) || /^\s*#{1,6}\s+\S/m.test(t) || /```/.test(t));
+        }
+
         async function aiCopyAs(md, fmt) {
             try {
                 if (fmt === 'rich') {
@@ -1803,7 +1887,7 @@ ctx.text,
                     const out = await aiStream(messages, ui, strict);
                     const finish = out.finish, usage = out.usage;
                     ui.wrap._answer = ui.wrap._answer || '（model 冇俾到內容）';
-                    ui.bubble.innerHTML = aiMarkdown(ui.wrap._answer);
+                    ui.bubble.innerHTML = aiConvert(ui.wrap._answer, 'html');
                     // 答完自動摺埋推理
                     ui.think.classList.remove('open');
                     ui.thinkHead.querySelector('.caret').textContent = '▸';
