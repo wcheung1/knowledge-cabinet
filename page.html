@@ -293,6 +293,19 @@
             <label>API Key</label>
             <input id="cfgKey" type="password" placeholder="貼上你嘅 API Key" spellcheck="false" autocomplete="off">
 
+            <label>送落去嘅本頁內容上限</label>
+            <select id="cfgCtxLimit">
+                <option value="30000">3 萬字（慳 token）</option>
+                <option value="60000">6 萬字</option>
+                <option value="100000">10 萬字（預設）</option>
+                <option value="200000">20 萬字</option>
+                <option value="500000">50 萬字</option>
+                <option value="0">唔限制（成版照送）</option>
+            </select>
+            <div class="ai-hint">GLM-5.2 嘅 context window 係 <b>100 萬 tokens</b>，中文大約 1 字 = 1 token，所以 10 萬字（≈10 萬 tokens）只係用咗佢十分一，好安全。
+            要留意：①每問一條都會重新送成頁內容，輸入 token 係按次計費嘅；②有啲代理商／端點嘅實際上限會細過官方值（例如某些第三方平台得 256K）。
+            內容超過上限時，我會保留<b>開頭同結尾</b>（結論通常喺尾），中間略去並標明。</div>
+
             <label>思考深度</label>
             <select id="cfgThinking">
                 <option value="auto">自動（預設，由 model 決定諗幾耐）</option>
@@ -1290,8 +1303,8 @@
            =================================================================== */
         const AI_CFG_KEY = 'kc_ai_cfg_v1';
         const AI_SIZE_KEY = 'kc_ai_size_v1';
-        const AI_DEFAULTS = { base: 'https://api.z.ai/api/paas/v4', model: 'glm-5.2', key: '', maxTokens: 8192, thinking: 'auto' };
-        const AI_CTX_LIMIT = 30000;      // 本頁內容最多送幾多字落去
+        const AI_DEFAULTS = { base: 'https://api.z.ai/api/paas/v4', model: 'glm-5.2', key: '',
+                              maxTokens: 8192, thinking: 'auto', ctxLimit: 100000 };
         const AI_STALL_MS = 60000;       // 幾耐冇收到新字就當佢死咗
         const AI_MAX_REASONING = 40000;  // 推理長到咁滯都未出答案 = 失控
 
@@ -1322,6 +1335,7 @@
             mt.value = String(aiCfg.maxTokens || 8192);
             if (!mt.value) mt.value = '8192';
             document.getElementById('cfgThinking').value = aiCfg.thinking || 'auto';
+            document.getElementById('cfgCtxLimit').value = String(aiCfg.ctxLimit === 0 ? 0 : (aiCfg.ctxLimit || 100000));
         }
         function aiSaveCfg(quiet) {
             aiCfg = {
@@ -1329,7 +1343,8 @@
                 model: document.getElementById('cfgModel').value.trim(),
                 key: document.getElementById('cfgKey').value.trim(),
                 maxTokens: Math.max(256, Math.min(131072, parseInt(document.getElementById('cfgMaxTokens').value, 10) || 8192)),
-                thinking: document.getElementById('cfgThinking').value
+                thinking: document.getElementById('cfgThinking').value,
+                ctxLimit: Math.max(0, parseInt(document.getElementById('cfgCtxLimit').value, 10) || 0)
             };
             try { localStorage.setItem(AI_CFG_KEY, JSON.stringify(aiCfg)); }
             catch (e) { aiNote('存唔到設定（瀏覽器唔俾用 localStorage）：' + e.message, true); return; }
@@ -1438,14 +1453,30 @@
                 parts.push('## ' + (ht || ('區塊 ' + (i + 1))) + '\n' + ct);
             });
             let text = parts.join('\n\n');
+            const full = text.length;
+            const limit = aiCfg.ctxLimit || 0;      // 0 = 唔限制
             let truncated = false;
-            if (text.length > AI_CTX_LIMIT) { text = text.slice(0, AI_CTX_LIMIT); truncated = true; }
-            return { text, truncated, len: text.length };
+            if (limit && text.length > limit) {
+                // 保留頭同尾：結論通常喺最後，淨係斬走後半會失去成篇文最重要嗰段
+                const head = Math.floor(limit * 0.6), tail = limit - head;
+                text = text.slice(0, head)
+                     + '\n\n……（中間省略咗 ' + (full - limit).toLocaleString('en-US') + ' 字）……\n\n'
+                     + text.slice(-tail);
+                truncated = true;
+            }
+            return { text, truncated, len: text.length, full };
         }
         function aiUpdateCtxInfo() {
             const ctx = aiPageContext();
-            aiCtxInfo.textContent = `📄 本頁 ${ctx.len} 字${ctx.truncated ? '（已截斷）' : ''}`
+            const est = aiEstTokens(ctx.text);
+            aiCtxInfo.textContent = (ctx.truncated
+                    ? `📄 本頁 ${ctx.full.toLocaleString('en-US')} 字 → 送 ${ctx.len.toLocaleString('en-US')} 字（已截斷）`
+                    : `📄 本頁 ${ctx.len.toLocaleString('en-US')} 字`)
+                + `（≈${aiShort(est)} tokens）`
                 + (aiCfgOK() ? `　·　${aiCfg.model}` : '　·　⚠️ 未設定 API');
+            aiCtxInfo.title = ctx.truncated
+                ? '本頁內容超過咗你設定嘅上限，已經保留頭尾、略去中間。可以喺 ⚙️ 設定調高。'
+                : '呢啲字會連同你條問題一齊送去 API，每問一次計一次輸入 token。';
         }
 
         /* 知識庫分析助理嘅提示詞
@@ -1877,6 +1908,13 @@ ctx.text,
             aiHistory.push({ role: 'user', content: question });
 
             const ctx = aiPageContext();
+            if (ctx.truncated) {
+                aiNote(`ℹ️ 本頁 ${ctx.full.toLocaleString('en-US')} 字，超過你設定嘅上限，今次送咗開頭同結尾共 ${ctx.len.toLocaleString('en-US')} 字（中間略去）。可以喺 ⚙️ 設定調高上限。`);
+            }
+            const ctxTok = aiEstTokens(ctx.text);
+            if (ctxTok > 800000) {
+                aiNote(`⚠️ 今次輸入約 ${aiShort(ctxTok)} tokens，好接近 GLM-5.2 嘅 100 萬 context 上限，加埋回覆可能會爆。建議喺 ⚙️ 設定調低內容上限。`, true);
+            }
             let ui = aiAddAssistantMsg();
 
             for (let attempt = 1; attempt <= 2; attempt++) {
