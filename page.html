@@ -60,6 +60,12 @@
         .box-content hr { border: none; border-top: 1px solid #e1e6ea; margin: 16px 0; }
         .box-content blockquote { margin: 8px 0; padding: 4px 14px; border-left: 3px solid #d4dbe0; color: #5d6d7e; }
         .box-content p { margin: 8px 0; }
+        .box-content table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+        .box-content th, .box-content td { border: 1px solid #d5dbe0; padding: 7px 11px; }
+        .box-content th { background: #f1f3f7; font-weight: bold; }
+        .ai-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12.5px; }
+        .ai-bubble th, .ai-bubble td { border: 1px solid #d8dee6; padding: 5px 8px; }
+        .ai-bubble th { background: #f1f3f7; }
 
         /* ===== 編輯模式：預設全部縮埋，單擊標題先展開 =====
            用 #mainContainer 提升權重，蓋過 .box.active 嗰條規則。
@@ -536,6 +542,7 @@
                 if (!isEditing) {
                     if(snap.exists() && snap.val().trim() !== "") {
                         pageMainTitle.innerHTML = snap.val();
+                        lastSyncedTitle = breadcrumbPlain(snap.val()).trim();
                         pageMainTitle.style.display = "inline-block";
                         document.title = pageMainTitle.textContent.trim() + " - Knowledge Cabinet";   // 用 textContent：innerText 對隱藏元素會 return 空
                         buildBreadcrumbs(pageId); 
@@ -794,6 +801,42 @@
         /* ---- 自動儲存：撳咗嗰個方塊以外嘅地方，就即刻鎖返兼儲存 ----
            判斷準則係「有冇離開個 .box」，所以喺同一個方塊入面撳自己嘅工具列、
            複製掣、由標題跳去內容，全部都唔算離開，唔會打斷你。 */
+        let lastSyncedTitle = null;   // 上次同總目錄對過數嘅標題
+
+        /* ---- 改咗文章總標題 → 總目錄嗰條連結嘅字都跟住改 ----
+           只改總目錄嗰條 link。文章內文入面嘅子頁面連結唔會郁，
+           因為嗰啲字通常係夾喺句子中間（「詳情睇下我嘅京都遊記」），
+           自動換字會搞爛你嘅文句。 */
+        async function syncTitleToIndex(newTitle) {
+            if (!isAdmin) return;
+            const plain = breadcrumbPlain(newTitle).trim();
+            if (!plain) return;                       // 空標題就唔好清走目錄嗰個名
+            if (plain === lastSyncedTitle) return;    // 冇變過就唔使做嘢
+            const path = isPrivate ? 'private_index_content' : 'index_content';
+            let snap;
+            try { snap = await db.ref(path).once('value'); }
+            catch (e) { return; }                     // 讀唔到（權限／網絡）就靜靜雞算數
+            if (!snap.exists()) { lastSyncedTitle = plain; return; }
+
+            const doc = new DOMParser().parseFromString('<div id="root">' + snap.val() + '</div>', 'text/html');
+            const root = doc.getElementById('root');
+            let changed = false;
+            root.querySelectorAll('.link-item a').forEach(a => {
+                let id = null;
+                try { id = new URL(a.getAttribute('href'), window.location.href).searchParams.get('id'); } catch (e) { return; }
+                if (id !== pageId) return;
+                const lock = /^🔒\s*/.test(a.textContent) || isPrivate ? '🔒 ' : '';
+                const next = lock + plain;
+                if (a.textContent !== next) { a.textContent = next; changed = true; }
+            });
+            lastSyncedTitle = plain;
+            if (!changed) return;
+            try {
+                await db.ref(path).set(root.innerHTML);
+                toast('↔ 總目錄嗰條連結嘅名都同步咗');
+            } catch (e) { toast('⚠️ 總目錄同步唔到：' + e.message, true); }
+        }
+
         let titleTouched = false;
         pageMainTitle.addEventListener('input', () => { titleTouched = true; });
 
@@ -1147,6 +1190,7 @@
                 flash(btn, '✅');
                 toast(msg || ('✅ 已儲存至雲端' + (isPrivate ? '（私人區）' : '')));
                 buildBreadcrumbs(pageId);
+                syncTitleToIndex(titleText);
             }).catch(err => {
                 isDirty = true;   // 儲存唔到就要留返個「未儲存」狀態，離開頁面先有警告
                 toast('❌ 儲存失敗：' + err.message, true);
@@ -1218,7 +1262,8 @@
             db.ref(P_TITLES + '/' + pageId).set(titleText);
             db.ref(P_PAGES + '/' + pageId).set(contentHTML).then(() => {
                 toast("✅ 內容已儲存至雲端" + (isPrivate ? "（私人區）" : ""));
-                buildBreadcrumbs(pageId); 
+                buildBreadcrumbs(pageId);
+                syncTitleToIndex(titleText);
             }).catch(err => alert("儲存失敗: " + err.message));
         });
 
@@ -1575,6 +1620,23 @@ ctx.text,
                     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
                     .replace(/~~([^~]+)~~/g, '$1');
         }
+        // 表格分隔線：|---|---|  或者 |:---|---:|
+        function aiIsTableSep(l) {
+            const t = String(l).trim();
+            if (!t.includes('|') || !t.includes('-')) return false;
+            return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(t);
+        }
+        function aiIsTableRow(l) { return /^\s*\|.*\|\s*$/.test(l); }
+        function aiSplitRow(l) {
+            return String(l).trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+        }
+        function aiAlignOf(cell) {
+            const t = String(cell).trim();
+            if (/^:-+:$/.test(t)) return 'center';
+            if (/^-+:$/.test(t)) return 'right';
+            return 'left';
+        }
+
         function aiConvert(md, mode) {
             const lines = String(md || '').replace(/\r/g, '').split('\n');
             const inline = mode === 'html' ? aiInlineHtml : (mode === 'wa' ? aiInlineWa : aiInlinePlain);
@@ -1597,13 +1659,42 @@ ctx.text,
                 code = [];
             }
 
-            for (const line of lines) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
                 if (/^\s*```/.test(line)) {
                     if (inCode) { flushCode(); inCode = false; } else { closeAllLists(); inCode = true; }
                     continue;
                 }
                 if (inCode) { code.push(line); continue; }
                 if (!line.trim()) { closeAllLists(); if (mode !== 'html') out.push(''); continue; }
+
+                // ---- 表格：一行 |…|…| 之後跟住一行 |---|---| ----
+                if (aiIsTableRow(line) && i + 1 < lines.length && aiIsTableSep(lines[i + 1])) {
+                    closeAllLists();
+                    const head = aiSplitRow(line);
+                    const aligns = aiSplitRow(lines[i + 1]).map(aiAlignOf);
+                    const rows = [];
+                    let j = i + 2;
+                    while (j < lines.length && aiIsTableRow(lines[j])) { rows.push(aiSplitRow(lines[j])); j++; }
+                    i = j - 1;
+
+                    if (mode === 'html') {
+                        const bd = 'border:1px solid #d5dbe0;padding:7px 11px;';
+                        let t = '<table style="border-collapse:collapse;width:100%;margin:12px 0;font-size:14px">';
+                        t += '<thead><tr>' + head.map((c, k) =>
+                            `<th style="${bd}background:#f1f3f7;text-align:${aligns[k] || 'left'};font-weight:bold">${inline(c)}</th>`).join('') + '</tr></thead>';
+                        t += '<tbody>' + rows.map(r => '<tr>' + head.map((_, k) =>
+                            `<td style="${bd}text-align:${aligns[k] || 'left'}">${inline(r[k] || '')}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+                        out.push(t);
+                    } else {
+                        // 純文字／WhatsApp 冇表格，砌返一行行「欄名：內容」，最少睇得明
+                        out.push(head.map(c => inline(c)).join(' ｜ '));
+                        out.push('─'.repeat(Math.min(28, head.join(' ｜ ').length)));
+                        rows.forEach(r => out.push(head.map((_, k) => inline(r[k] || '')).join(' ｜ ')));
+                    }
+                    continue;
+                }
 
                 // 分隔線 --- / *** / ___
                 if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) {
@@ -1679,11 +1770,13 @@ ctx.text,
                 || /^[ \t]*\d+[.)]\s+\S/m.test(t)         // 1. 編號
                 || /```/.test(t)                          // 程式碼區塊
                 || /^\s*>\s+\S/m.test(t)                  // > 引言
-                || /\[[^\]]+\]\([^)\s]+\)/.test(t);       // [文字](網址)
+                || /\[[^\]]+\]\([^)\s]+\)/.test(t)        // [文字](網址)
+                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t);   // | 表格 |
         }
         // 呢幾種符號幾乎唔會喺「已經有格式」嘅內容度出現，見到就當佢係 Markdown 原始碼
         function strongMarkdown(t) {
-            return !!t && (/\*\*[^*\n]+\*\*/.test(t) || /^\s*#{1,6}\s+\S/m.test(t) || /```/.test(t));
+            return !!t && (/\*\*[^*\n]+\*\*/.test(t) || /^\s*#{1,6}\s+\S/m.test(t) || /```/.test(t)
+                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t));
         }
 
         async function aiCopyAs(md, fmt) {
