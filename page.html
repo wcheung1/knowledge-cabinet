@@ -1590,19 +1590,37 @@ ctx.text,
              plain → 乜符號都清走
              md    → 原封不動
         */
+        /* Markdown 反斜線轉義：\_ \* \# 等等，意思係「呢個符號淨係一個普通字，唔好當語法」。
+           例如傳真封面嗰啲填充橫線就係寫成 \_\_\_\_\_\_，應該顯示成 ______。
+           做法：喺任何轉換之前，將 \X 抽走做 placeholder，最尾先放返個 X 出嚟，
+           噉樣佢就唔會俾粗體／斜體／清單嗰啲 regex 再食一次。 */
+        const AI_ESCAPABLE = /\\([\\`*_{}\[\]()#+\-.!|~<>"'])/g;
+        function aiPullEscapes(text, bag) {
+            return String(text).replace(AI_ESCAPABLE, (m, c) => { bag.push(c); return '\u0003' + (bag.length - 1) + '\u0003'; });
+        }
+
         function aiInlineHtml(t) {
-            let h = aiEscape(t); const codes = [];
+            const codes = [], esc = [];
+            let h = String(t);
+            // 1) 先抽走 `code`：入面嘅嘢一律原封不動（連反斜線都唔應該拆）
             h = h.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0001' + (codes.length - 1) + '\u0001'; });
+            // 2) 再抽走反斜線轉義
+            h = aiPullEscapes(h, esc);
+            // 3) 之後先做 HTML escape 同各種語法
+            h = aiEscape(h);
             h = h.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
             h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
             h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
             h = h.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-            return h.replace(/\u0001(\d+)\u0001/g, (m, i) =>
-                '<code style="font-family:Consolas,Menlo,monospace;background:#f1f3f7;padding:1px 4px;border-radius:3px">' + codes[+i] + '</code>');
+            h = h.replace(/\u0001(\d+)\u0001/g, (m, i) =>
+                '<code style="font-family:Consolas,Menlo,monospace;background:#f1f3f7;padding:1px 4px;border-radius:3px">' + aiEscape(codes[+i]) + '</code>');
+            return h.replace(/\u0003(\d+)\u0003/g, (m, i) => aiEscape(esc[+i]));
         }
         function aiInlineWa(t) {
-            let x = t; const codes = [];
+            const codes = [], esc = [];
+            let x = String(t);
             x = x.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0001' + (codes.length - 1) + '\u0001'; });
+            x = aiPullEscapes(x, esc);
             x = x.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
             // ⚠ 要先收起粗體先至轉斜體：唔係嘅話 **粗體** 變咗 *粗體* 之後，
             // 會即刻俾下面條斜體 regex 再食一次，變埋 _粗體_。
@@ -1611,14 +1629,20 @@ ctx.text,
             x = x.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1_$2_');   // 斜體係底線
             x = x.replace(/\u0002(\d+)\u0002/g, (m, i) => '*' + bolds[+i] + '*');   // WhatsApp 粗體係單星
             x = x.replace(/~~([^~]+)~~/g, '~$1~');
-            return x.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+            x = x.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+            return x.replace(/\u0003(\d+)\u0003/g, (m, i) => esc[+i]);
         }
         function aiInlinePlain(t) {
-            return t.replace(/`([^`]+)`/g, '$1')
-                    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1（$2）')
-                    .replace(/\*\*([^*]+)\*\*/g, '$1')
-                    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
-                    .replace(/~~([^~]+)~~/g, '$1');
+            const codes = [], esc = [];
+            let x = String(t);
+            x = x.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0001' + (codes.length - 1) + '\u0001'; });
+            x = aiPullEscapes(x, esc);
+            x = x.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1（$2）')
+                 .replace(/\*\*([^*]+)\*\*/g, '$1')
+                 .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
+                 .replace(/~~([^~]+)~~/g, '$1');
+            x = x.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+            return x.replace(/\u0003(\d+)\u0003/g, (m, i) => esc[+i]);
         }
         // 表格分隔線：|---|---|  或者 |:---|---:|
         function aiIsTableSep(l) {
@@ -1771,7 +1795,11 @@ ctx.text,
                 || /```/.test(t)                          // 程式碼區塊
                 || /^\s*>\s+\S/m.test(t)                  // > 引言
                 || /\[[^\]]+\]\([^)\s]+\)/.test(t)        // [文字](網址)
-                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t);   // | 表格 |
+                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t)    // | 表格 |
+                // 連續嘅反斜線轉義，例如傳真封面嗰啲 \_\_\_\_ 填充橫線。
+                // 特登要求「連續兩個或以上」同埋限死幾個常見符號，
+                // 唔係嘅話貼段 regex（例如 \d+\.\d+）都會俾人當成 Markdown 拆咗佢。
+                || /(?:\\[_*#~|`]){2,}/.test(t);
         }
         // 呢幾種符號幾乎唔會喺「已經有格式」嘅內容度出現，見到就當佢係 Markdown 原始碼
         function strongMarkdown(t) {
