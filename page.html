@@ -140,6 +140,31 @@
         #bbTop { background: #34495e; }
 
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
+        /* ===================== 🔍 頁內搜尋 ===================== */
+        #searchBar { display: none; margin-bottom: 18px; background: #fff; border: 2px solid #3498db; border-radius: 8px;
+                     padding: 8px 10px; align-items: center; gap: 8px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(52,152,219,0.15); }
+        #searchBar.open { display: flex; }
+        #searchInput { flex: 1 1 180px; border: none; outline: none; font-size: 15px; font-family: inherit; padding: 4px 2px; color: #2c3e50; }
+        #searchCount { font-size: 12px; color: #7f8c8d; white-space: nowrap; font-weight: bold; }
+        #searchBar button { border: none; border-radius: 5px; padding: 5px 9px; cursor: pointer; font-size: 13px;
+                            background: #ecf0f1; color: #2c3e50; font-weight: bold; }
+        #searchBar button:hover { background: #d4eaf2; }
+        #searchBar button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #searchClose { background: #e74c3c !important; color: #fff !important; }
+        .btn-search { background: #9b59b6; color: white; border: none; padding: 6px 12px; border-radius: 6px;
+                      font-weight: bold; cursor: pointer; font-size: 14px; margin-right: 8px; }
+        .btn-search:hover { background: #8e44ad; }
+
+        mark.kc-hit { background: #ffe98a; color: inherit; padding: 0 1px; border-radius: 2px; }
+        mark.kc-hit.kc-current { background: #ff9f1a; color: #fff; box-shadow: 0 0 0 2px rgba(255,159,26,0.35); }
+        .box.kc-has-hit { border-color: #f39c12; }
+        /* 搜尋期間臨時攤開，唔會影響「訪客預設」，關咗搜尋就恢復原狀 */
+        #mainContainer .box.kc-open > .box-content,
+        #mainContainer.editing .box.kc-open > .box-content { display: block; }
+        .box.kc-has-hit > .box-header { background: #fef9e7; }
+        .kc-hit-badge { font-size: 11px; font-weight: normal; color: #b9770e; background: #fef9e7;
+                        border: 1px solid #f7dc6f; padding: 1px 7px; border-radius: 10px; margin-left: 8px; white-space: nowrap; }
+
         /* ===================== ✨ 問 AI ===================== */
         #aiFab { position: fixed; right: 20px; bottom: 20px; width: 54px; height: 54px; border-radius: 50%;
                  background: #6c5ce7; color: #fff; font-size: 24px; border: none; cursor: pointer; z-index: 9990;
@@ -239,7 +264,17 @@
         </div>
 
         <div class="nav-bar" id="navBar">
+            <button id="searchBtn" class="btn-search" title="喺呢版搵字（Ctrl+F）">🔍 搜尋本頁</button>
             <button id="copyShareBtn" class="btn-copy-link">🔗 複製此頁連結</button>
+        </div>
+
+        <div id="searchBar">
+            <span style="font-size:16px;">🔍</span>
+            <input id="searchInput" type="text" placeholder="輸入關鍵字…（會連縮埋咗嘅區塊一齊搵）" spellcheck="false" autocomplete="off">
+            <span id="searchCount"></span>
+            <button id="searchPrev" title="上一個 (Shift+Enter)">▲</button>
+            <button id="searchNext" title="下一個 (Enter)">▼</button>
+            <button id="searchClose" title="關閉 (Esc)">✕</button>
         </div>
 
         <div class="sys-controls">
@@ -761,6 +796,7 @@
 
         function applyState(s) {
             applyingHistory = true;
+            kcClear(); if (searchBar.classList.contains('open')) searchCount.textContent = '（內容已更新，請再搵一次）';
             cabinetContent.innerHTML = s.content;
             pageMainTitle.innerHTML = s.title;
             [...cabinetContent.querySelectorAll('.box')].forEach((b, i) => {
@@ -892,7 +928,7 @@
         // 所以要有 fallback，先至可以「唔使展開都複製到」。
         function nodeToText(el) {
             const clone = el.cloneNode(true);
-            clone.querySelectorAll('.el-tools, .box-toolbar').forEach(n => n.remove());
+            clone.querySelectorAll('.el-tools, .box-toolbar, .kc-hit-badge').forEach(n => n.remove());
             clone.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
             clone.querySelectorAll('p,div,li,h1,h2,h3,h4,tr,blockquote').forEach(b => b.append('\n'));
             return (clone.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
@@ -1156,7 +1192,15 @@
            =================================================================== */
         function getCleanContentHTML() {
             const clone = cabinetContent.cloneNode(true);
-            clone.querySelectorAll('.box-toolbar, .el-tools').forEach(t => t.remove());
+            clone.querySelectorAll('.box-toolbar, .el-tools, .kc-hit-badge').forEach(t => t.remove());
+            // 搜尋嘅螢光標記唔可以存落雲端
+            clone.querySelectorAll('mark.kc-hit').forEach(m => {
+                const parent = m.parentNode;
+                while (m.firstChild) parent.insertBefore(m.firstChild, m);
+                parent.removeChild(m);
+            });
+            clone.querySelectorAll('.box').forEach(b => b.classList.remove('kc-has-hit', 'kc-open'));
+            clone.normalize();
             clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
             clone.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
             clone.querySelectorAll('.box').forEach(box => {
@@ -1337,6 +1381,152 @@
         });
         window.addEventListener('beforeunload', e => {
             if (isEditing && isDirty) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+
+        /* ===================================================================
+           🔍 頁內搜尋
+           ---------------------------------------------------------------
+           點解唔用瀏覽器嗰個 Ctrl+F：縮埋咗嘅區塊係 display:none，
+           瀏覽器根本搵唔到入面啲字。呢度自己行勻成個 DOM 嘅文字節點，
+           所以收埋咗嘅內容一樣搵到，仲會話你知係喺邊個區塊。
+           =================================================================== */
+        const searchBar = document.getElementById('searchBar');
+        const searchInput = document.getElementById('searchInput');
+        const searchCount = document.getElementById('searchCount');
+        let kcHits = [], kcIndex = -1, kcDebounce = null;
+
+        function kcClear() {
+            // 由後面拆起，避免拆到一半打亂咗前面嘅位置
+            [...document.querySelectorAll('#cabinetContent mark.kc-hit')].reverse().forEach(m => {
+                const parent = m.parentNode;
+                while (m.firstChild) parent.insertBefore(m.firstChild, m);
+                parent.removeChild(m);
+                parent.normalize();   // 將拆返開嘅文字節點併返埋，唔係搵多幾次會愈拆愈碎
+            });
+            document.querySelectorAll('#cabinetContent .box').forEach(b => b.classList.remove('kc-has-hit', 'kc-open'));
+            document.querySelectorAll('#cabinetContent .kc-hit-badge').forEach(b => b.remove());
+            kcHits = []; kcIndex = -1;
+        }
+
+        function kcTextNodes(root) {
+            const out = [];
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                    // 工具列、浮動掣、已經 mark 咗嘅嘢都唔好搵
+                    const p = node.parentElement;
+                    if (!p || p.closest('.box-toolbar, .el-tools, mark.kc-hit')) return NodeFilter.FILTER_REJECT;
+                    if (p.tagName === 'SCRIPT' || p.tagName === 'STYLE') return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            while (walker.nextNode()) out.push(walker.currentNode);
+            return out;
+        }
+
+        function kcSearch(term) {
+            kcClear();
+            const q = (term || '').trim();
+            if (!q) { searchCount.textContent = ''; return; }
+            const lower = q.toLowerCase();
+
+            kcTextNodes(cabinetContent).forEach(node => {
+                const text = node.nodeValue;
+                const hay = text.toLowerCase();
+                let from = 0, at, pieces = [];
+                while ((at = hay.indexOf(lower, from)) !== -1) { pieces.push(at); from = at + lower.length; }
+                if (!pieces.length) return;
+
+                // 由尾至頭拆，前面嘅 index 先唔會走位
+                let rest = node;
+                for (let i = pieces.length - 1; i >= 0; i--) {
+                    const tail = rest.splitText(pieces[i]);
+                    const after = tail.splitText(q.length);
+                    const mark = document.createElement('mark');
+                    mark.className = 'kc-hit';
+                    tail.parentNode.replaceChild(mark, tail);
+                    mark.appendChild(tail);
+                }
+            });
+
+            kcHits = [...cabinetContent.querySelectorAll('mark.kc-hit')];
+
+            // 標示邊個區塊有結果，順手數埋
+            const perBox = new Map();
+            kcHits.forEach(m => {
+                const box = m.closest('.box');
+                if (!box) return;
+                perBox.set(box, (perBox.get(box) || 0) + 1);
+            });
+            perBox.forEach((n, box) => {
+                // ⚠ 用獨立嘅 kc-open，唔可以借用 active / edit-open：
+                // active 係「訪客預設」，會存落雲端；喺搜尋時偷偷加咗，
+                // 你之後一儲存就會靜靜雞改咗個預設，係 data corruption。
+                box.classList.add('kc-has-hit', 'kc-open');
+                const header = box.querySelector('.box-header');
+                if (header && !header.querySelector('.kc-hit-badge')) {
+                    const b = document.createElement('span');
+                    b.className = 'kc-hit-badge';
+                    b.setAttribute('contenteditable', 'false');
+                    b.textContent = '🔍 ' + n + ' 個';
+                    header.appendChild(b);
+                }
+            });
+
+            if (!kcHits.length) { searchCount.textContent = '搵唔到'; searchCount.style.color = '#e74c3c'; return; }
+            searchCount.style.color = '#7f8c8d';
+            kcGo(0);
+        }
+
+        function kcGo(i) {
+            if (!kcHits.length) return;
+            if (kcIndex >= 0 && kcHits[kcIndex]) kcHits[kcIndex].classList.remove('kc-current');
+            kcIndex = (i + kcHits.length) % kcHits.length;
+            const cur = kcHits[kcIndex];
+            cur.classList.add('kc-current');
+
+            cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const box = cur.closest('.box');
+            const boxName = box ? (box.querySelector('.box-header') || {}).textContent : '';
+            const clean = (boxName || '').replace(/🔍 \d+ 個$/, '').trim();
+            searchCount.textContent = `${kcIndex + 1} / ${kcHits.length}` + (clean ? `　·　${clean.slice(0, 14)}` : '');
+        }
+
+        function kcOpen() {
+            searchBar.classList.add('open');
+            searchInput.focus();
+            searchInput.select();
+        }
+        function kcClose() {
+            searchBar.classList.remove('open');
+            kcClear();
+            searchCount.textContent = '';
+        }
+
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            if (searchBar.classList.contains('open')) kcClose(); else kcOpen();
+        });
+        document.getElementById('searchClose').addEventListener('click', kcClose);
+        document.getElementById('searchNext').addEventListener('click', () => kcGo(kcIndex + 1));
+        document.getElementById('searchPrev').addEventListener('click', () => kcGo(kcIndex - 1));
+        searchInput.addEventListener('input', () => {
+            clearTimeout(kcDebounce);
+            kcDebounce = setTimeout(() => kcSearch(searchInput.value), 180);
+        });
+        searchInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); if (kcHits.length) kcGo(kcIndex + (e.shiftKey ? -1 : 1)); else kcSearch(searchInput.value); }
+            else if (e.key === 'Escape') { e.preventDefault(); kcClose(); }
+        });
+        // Ctrl+F 攔截返嚟自己用（瀏覽器嗰個搵唔到縮埋嘅內容）
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key || '').toLowerCase() === 'f') {
+                if (e.target && e.target.closest && e.target.closest('#aiPanel')) return;   // AI 對話框入面用返瀏覽器嗰個
+                e.preventDefault();
+                kcOpen();
+            } else if (e.key === 'Escape' && searchBar.classList.contains('open')) {
+                kcClose();
+            }
         });
 
         /* ===================================================================
