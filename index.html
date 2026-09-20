@@ -2,7 +2,7 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>我的網絡機櫃 - 總目錄</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -58,6 +58,9 @@
         .btn-relink { background: #16a085; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: 6px; }
         .editing .btn-relink { display: inline-block; }
         .btn-delete { background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; display: none; margin-left: 10px; }
+        /* Placeholder 用 CSS 生成，唔佔字元、唔會存落雲端 */
+        .editing .link-item a.is-empty::before { content: '（未命名文章 —— 撳我輸入標題）'; color: #b0b8bf; font-weight: normal; }
+        .editing .cat-title.is-empty::before { content: '（未命名分類）'; color: #b0b8bf; font-weight: normal; }
         .editing .btn-delete { display: inline-block; }
 
         /* ===== 拖曳緊嘅時候 ===== */
@@ -321,6 +324,13 @@
         /* ===================================================================
            分類摺疊：▸／▾ 同埋篇數，全部都係執行時加，唔會存落雲端
            =================================================================== */
+        function refreshPlaceholders() {
+            const on = mainContainer.classList.contains('editing');
+            document.querySelectorAll('#indexContent .link-item a, #privateContent .link-item a, #indexContent .cat-title, #privateContent .cat-title')
+                .forEach(el => el.classList.toggle('is-empty', on && el.textContent.replace(/^🔒\s*/, '').trim() === ''));
+            if (!on) document.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty'));
+        }
+
         function decorateCategories() {
             document.querySelectorAll('#indexContent .category, #privateContent .category').forEach(cat => {
                 const header = cat.querySelector('.category-header');
@@ -351,6 +361,7 @@
                 }
                 badge.textContent = cat.querySelectorAll('.link-item').length + ' 篇';
                 syncToggle(cat);
+                refreshPlaceholders();
             });
         }
         function syncToggle(cat) {
@@ -376,6 +387,7 @@
         function cleanHTML(container) {
             const c = container.cloneNode(true);
             c.querySelectorAll('.cat-toggle, .cat-count, .btn-relink').forEach(n => n.remove());
+            c.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty'));
             c.querySelectorAll('.category, .link-item').forEach(n => n.classList.remove('cat-open', 'dragging'));
             c.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
             c.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
@@ -391,6 +403,7 @@
                 // ⚠ 用 textContent 而唔用 innerText：收埋咗嘅分類入面，innerText 會係空白
                 const linkText = a.textContent.replace(/^🔒\s*/, '').trim();
                 db.ref(titlesPath + '/' + pId).once('value').then(snap => {
+                    if (!linkText) return;   // 空標題就唔好寫個空字串落雲端
                     if (!snap.exists() || snap.val().trim() === "" || snap.val() === "點此修改新文章標題") {
                         db.ref(titlesPath + '/' + pId).set(linkText);
                     }
@@ -461,6 +474,7 @@
             if (!isEditing) return;
             isDirty = true;
             lastEditedEl = (e.target.closest && e.target.closest('[contenteditable="true"]')) || e.target;
+            refreshPlaceholders();
         }, true);
         document.addEventListener('mousedown', e => {
             if (!isEditing || !isDirty || !lastEditedEl || !e.target.closest) return;
@@ -920,7 +934,7 @@
                     db.ref(P.parents + '/' + finalId).set('index');
                     const href = `page.html?id=${finalId}` + (inPrivate ? '&zone=private' : '');
                     const newItem = document.createElement('div'); newItem.className = 'link-item';
-                    newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="${href}">${inPrivate ? '🔒 ' : ''}點此修改新文章標題</a> <button class="btn-delete del-link">X</button>`;
+                    newItem.innerHTML = `<span class="drag-handle">☰</span> <a href="${href}">${inPrivate ? '🔒 ' : ''}</a> <button class="btn-delete del-link">X</button>`;
                     list.appendChild(newItem);
                     
                     const newAnchor = newItem.querySelector('a');
@@ -958,13 +972,13 @@
             mainTitle.setAttribute('contenteditable', 'true');
             document.querySelectorAll('.cat-title').forEach(el => el.setAttribute('contenteditable', 'true'));
             document.querySelectorAll('.link-item a').forEach(el => { el.setAttribute('contenteditable', 'true'); el.onclick = e => e.preventDefault(); });
-            setupButtons(); decorateCategories();
+            setupButtons(); decorateCategories(); refreshPlaceholders();
             toast('⚙️ 管理模式：改完撳去其他地方就會自動儲存');
         });
 
         function makeCategory(targetContainer, defaultName) {
             const newCat = document.createElement('div'); newCat.className = 'category cat-open';
-            newCat.innerHTML = `<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title" contenteditable="true">${defaultName}</span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>`;
+            newCat.innerHTML = `<div class="category-header"><span class="drag-handle">☰</span><span class="cat-title" contenteditable="true"></span><button class="btn-add-link">+ 新增文章</button><button class="btn-delete del-cat">刪除</button></div><div class="link-list"></div>`;
             targetContainer.appendChild(newCat);
             setupButtons(); decorateCategories();
             markDirty(); scheduleAutoSave();
@@ -987,7 +1001,8 @@
             if (isAdmin) { editBtn.style.display = "inline-block"; backupBtn.style.display = "inline-block"; restoreBtn.style.display = "inline-block"; }
             mainTitle.setAttribute('contenteditable', 'false');
             document.querySelectorAll('.cat-title, .link-item a').forEach(el => el.setAttribute('contenteditable', 'false'));
-            document.querySelectorAll('.link-item a').forEach(el => el.onclick = null); 
+            document.querySelectorAll('.link-item a').forEach(el => el.onclick = null);
+            document.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty')); 
         }
     </script>
 </body>

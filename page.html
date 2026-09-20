@@ -2,7 +2,7 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>文章內容 - Knowledge Cabinet</title>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -73,8 +73,20 @@
         #mainContainer.editing .box-content { display: none; }
         #mainContainer.editing .box.edit-open .box-content { display: block; }
         #mainContainer.editing .box-header { cursor: pointer; min-height: 22px; }
-        /* 冇標題嘅區塊喺編輯模式俾個提示（CSS 生成內容，唔會存落雲端） */
-        #mainContainer.editing .box-header:empty::before { content: '（呢個區塊冇標題 —— 雙擊可以加）'; color: #95a5a6; font-weight: normal; font-size: 14px; }
+        /* ===== Placeholder：CSS 生成，唔佔字元、唔會存落雲端 =====
+           :empty 只對「完全冇 child node」先生效，所以用 .is-empty class 由 JS 標，
+           先至捕捉到「得一個 <br>」或者「得個空 <p>」呢啲 contenteditable 常見殘留。 */
+        #mainContainer.editing .box-header.is-empty::before {
+            content: '（未有標題 —— 雙擊可以輸入，或者撳 ✨ 叫 AI 幫你諗）';
+            color: #b0b8bf; font-weight: normal; font-size: 14px; pointer-events: none;
+        }
+        #mainContainer.editing .box-content.is-empty::before {
+            content: '（未有內容 —— 雙擊可以輸入）';
+            color: #b0b8bf; font-size: 14px; pointer-events: none;
+        }
+        #mainContainer.editing #pageMainTitle.is-empty::before {
+            content: '（未有文章總標題）'; color: #b0b8bf; font-weight: normal; pointer-events: none;
+        }
         #mainContainer.editing .box-header::after { transform: none; }
         #mainContainer.editing .box.edit-open .box-header::after { transform: rotate(180deg); }
         /* 只有「解鎖咗」嘅元素先有藍色虛線框，一眼睇到自己改緊邊度 */
@@ -118,6 +130,8 @@
         .btn-state.collapsed { background: #95a5a6; } /* 訪客預設縮埋 = 灰色 */
         .btn-sub { background: #9b59b6; }
         .btn-save-box { background: #27ae60; }
+        .btn-title-ai { background: #6c5ce7; }
+        .btn-title-ai.busy { background: #a29bfe; cursor: progress; }
         .btn-delete-box { background: #e74c3c; }
         .btn-delete-box:hover { background: #c0392b; }
 
@@ -138,6 +152,10 @@
         #bbAdd { background: #3498db; } #bbSave { background: #27ae60; } #bbFold { background: #7f8c8d; }
         #bbExpand { background: #7f8c8d; } #bbAllCollapse { background: #95a5a6; }
         #bbTop { background: #34495e; }
+        #bbTitles { background: #6c5ce7; }
+        #bbTitles:disabled { background: #b2aee6; cursor: not-allowed; }
+        #aiLangBar { display: none; align-items: center; gap: 6px; font-size: 12px; color: #7f8c8d; margin-top: 10px; justify-content: center; }
+        #aiLangBar select { border: 1px solid #cfd6dd; border-radius: 4px; padding: 3px 6px; font-size: 12px; font-family: inherit; }
 
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
         /* ===================== 🔍 頁內搜尋 ===================== */
@@ -166,22 +184,52 @@
                         border: 1px solid #f7dc6f; padding: 1px 7px; border-radius: 10px; margin-left: 8px; white-space: nowrap; }
 
         /* ===================== ✨ 問 AI ===================== */
-        #aiFab { position: fixed; right: 20px; bottom: 20px; width: 54px; height: 54px; border-radius: 50%;
+        #aiFab { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+                 width: 54px; height: 54px; border-radius: 50%;
                  background: #6c5ce7; color: #fff; font-size: 24px; border: none; cursor: pointer; z-index: 9990;
                  box-shadow: 0 4px 14px rgba(108,92,231,0.45); display: flex; align-items: center; justify-content: center; }
         #aiFab:hover { background: #5b4bd6; }
+
+        /* ⚠ 手機版嘅高度陷阱：
+           Android 上面嘅 Brave / Chrome，100vh 係「網址列收埋咗之後」嗰個最大高度，
+           唔係你眼前真正見到嗰忽。個框又係釘住 bottom，所以個框會由底向上撐，
+           撐到超出可視範圍 —— 結果頂部條標題列（連 ⚙️ 設定掣）俾人切走咗。
+           解法：用 100dvh（dynamic viewport height，會跟住網址列同鍵盤變），
+           舊瀏覽器就 fallback 返 100vh；再加一個 max-height 封頂。 */
         #aiPanel { display: none; position: fixed; right: 20px; bottom: 20px; z-index: 9991;
-                   width: min(410px, calc(100vw - 24px)); height: min(620px, calc(100vh - 40px));
+                   width: min(410px, calc(100vw - 24px));
+                   height: min(620px, calc(100vh - 40px));
+                   height: min(620px, calc(100dvh - 40px));
+                   max-height: calc(100vh - 24px);
+                   max-height: calc(100dvh - 24px);
                    background: #fff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);
                    flex-direction: column; overflow: hidden; font-size: 14px; }
         #aiPanel.open { display: flex; }
+
+        /* 手機／細螢幕：索性滿屏（四邊留少少位），唔好再計高度，最穩陣。
+           用 !important 係因為要蓋過 JS 由 localStorage 還原嗰個 inline 尺寸 ——
+           喺電腦拉大過嘅尺寸，唔可以帶落手機度用。 */
+        @media (max-width: 680px), (max-height: 600px) {
+            #aiPanel {
+                left: 8px !important; right: 8px !important;
+                top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+                bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+                width: auto !important; height: auto !important; max-height: none !important;
+            }
+            #aiResizer { display: none !important; }
+            #aiFab { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+        }
+        /* 觸控裝置冇 mouse，拉手冇用，仲阻住撳到標題列 */
+        @media (hover: none) and (pointer: coarse) { #aiResizer { display: none !important; } }
         .ai-head { background: #6c5ce7; color: #fff; padding: 10px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
         .ai-head .ai-title { font-weight: bold; flex-grow: 1; font-size: 14px; }
         .ai-head button { background: rgba(255,255,255,0.18); color: #fff; border: none; border-radius: 5px;
                           width: 28px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; }
         .ai-head button:hover { background: rgba(255,255,255,0.34); }
 
-        #aiSettings { display: none; padding: 14px; background: #f8f9fb; border-bottom: 1px solid #e6e9ef; overflow-y: auto; flex-shrink: 0; max-height: 100%; }
+        #aiSettings { display: none; padding: 14px; background: #f8f9fb; border-bottom: 1px solid #e6e9ef;
+                      overflow-y: auto; -webkit-overflow-scrolling: touch;
+                      flex: 0 1 auto; min-height: 0; max-height: 62%; }
         #aiSettings.open { display: block; }
         #aiSettings label { display: block; font-size: 12px; font-weight: bold; color: #34495e; margin: 10px 0 4px; }
         #aiSettings input, #aiSettings select { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid #cfd6dd;
@@ -192,7 +240,10 @@
         #aiSaveCfg { background: #6c5ce7; color: #fff; border: none; border-radius: 6px; padding: 9px 16px;
                      font-weight: bold; cursor: pointer; margin-top: 14px; width: 100%; font-size: 13px; }
 
-        #aiMsgs { flex-grow: 1; overflow-y: auto; padding: 12px; background: #f4f7f6; }
+        /* min-height:0 好關鍵：flex item 預設 min-height:auto，唔肯縮到細過自己啲內容，
+           對話一長就會將成個框由底向上撐爆，頂部標題列就係咁樣俾人切走。 */
+        #aiMsgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                  padding: 12px; background: #f4f7f6; }
         .ai-msg { margin-bottom: 14px; }
         .ai-msg .ai-role { font-size: 11px; color: #7f8c8d; font-weight: bold; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
         .ai-msg .ai-bubble { background: #fff; border-radius: 8px; padding: 10px 12px; border: 1px solid #e6e9ef;
@@ -230,7 +281,13 @@
 
         .ai-foot { display: flex; gap: 6px; padding: 10px; border-top: 1px solid #e6e9ef; background: #fff; flex-shrink: 0; align-items: flex-end; }
         #aiInput { flex-grow: 1; resize: none; border: 1px solid #cfd6dd; border-radius: 6px; padding: 8px 10px;
-                   font-family: inherit; font-size: 13px; line-height: 1.5; max-height: 110px; }
+                   font-family: inherit; font-size: 13px; line-height: 1.5; max-height: 110px; min-width: 0; }
+        /* iOS Safari 見到 font-size < 16px 嘅輸入框會自動放大成版，好煩 */
+        @media (max-width: 680px) {
+            #aiInput, #aiSettings input, #aiSettings select, #searchInput { font-size: 16px; }
+            .ai-head .ai-title { font-size: 13px; }
+            .ai-head button { width: 32px; height: 32px; }   /* 手指撳得到 */
+        }
         .ai-foot button { border: none; border-radius: 6px; width: 40px; height: 38px; cursor: pointer; font-size: 15px; color: #fff; flex-shrink: 0; }
         #aiSend { background: #6c5ce7; } #aiSend:disabled { background: #b2aee6; cursor: not-allowed; }
         #aiStop { background: #e74c3c; display: none; }
@@ -246,8 +303,11 @@
         .ai-usage b { color: #6c5ce7; font-weight: bold; }
 
         /* 放大 / 自己拉大細 */
-        #aiPanel.max { right: 12px !important; bottom: 12px !important;
-                       width: calc(100vw - 24px) !important; height: calc(100vh - 24px) !important; }
+        #aiPanel.max { right: 12px !important; bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+                       width: calc(100vw - 24px) !important;
+                       height: calc(100vh - 24px) !important;
+                       height: calc(100dvh - 24px) !important;
+                       max-height: none !important; }
         #aiResizer { position: absolute; left: 0; top: 0; width: 20px; height: 20px; cursor: nwse-resize; z-index: 5;
                      background: linear-gradient(135deg, rgba(255,255,255,0.85) 0 2px, transparent 2px 5px,
                                  rgba(255,255,255,0.85) 5px 7px, transparent 7px 10px,
@@ -308,7 +368,15 @@
             <button id="bbFold">▸ 全部收起</button>
             <button id="bbExpand">▾ 全部展開</button>
             <button id="bbAllCollapse" title="將所有區塊嘅「訪客預設」一次過設為縮埋">👀 訪客預設全部縮埋</button>
+            <button id="bbTitles">✨ 一次過生成所有缺標題</button>
             <button id="bbTop">⬆️ 返回頂部</button>
+            <div id="aiLangBar">
+                ✨ AI 生成標題語言：
+                <select id="cfgTitleLang">
+                    <option value="zh">繁體中文（預設）</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -550,6 +618,22 @@
             setTimeout(() => { btn.innerHTML = old; btn.style.background = oldBg; }, 1500);
         }
         function markDirty() { if (isEditing) isDirty = true; }
+
+        // 一個格「睇落係空」嘅定義：得空白、或者淨係得 <br> / 空 <p> 呢啲殘留
+        function kcIsBlank(el) {
+            if (!el) return false;
+            if (el.textContent.trim() !== '') return false;
+            return !el.querySelector('img, table, hr, iframe, video, svg');
+        }
+        function refreshPlaceholders() {
+            if (!isEditing) {
+                document.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty'));
+                return;
+            }
+            document.querySelectorAll('#cabinetContent .box-header, #cabinetContent .box-content')
+                .forEach(el => el.classList.toggle('is-empty', kcIsBlank(el)));
+            pageMainTitle.classList.toggle('is-empty', kcIsBlank(pageMainTitle));
+        }
 
         function showLockedScreen() {
             const fab = document.getElementById('aiFab'); if (fab) fab.style.display = 'none';
@@ -806,7 +890,7 @@
                 addToolbarToBox(b);
             });
             applyingHistory = false;
-            markDirty();
+            markDirty(); refreshPlaceholders();
         }
         // 復原／重做之後個內容係乾淨嘅（冇 contenteditable），撳出面嗰個自動儲存
         // 判斷唔會 trigger，所以要自己排一次。用 debounce，長撳 Ctrl+Z 唔會寫幾十次。
@@ -1134,6 +1218,8 @@
 
             // --- 右邊：變為子頁面、儲存、刪除 ---
             const right = document.createElement('div'); right.className = 'tb-group';
+            right.appendChild(mkBtn('btn-title-ai', '✨', '叫 AI 睇返呢個區塊嘅內容，幫佢諗個標題',
+                function () { aiTitleOne(box, this); }, true));
             right.appendChild(mkBtn('btn-sub', '🔗', '將反白咗嘅文字變成子頁面連結',
                 () => createSubPageFromSelection(box), true));
             right.appendChild(mkBtn('btn-save-box', '💾', '即刻儲存（唔會離開編輯模式）',
@@ -1200,6 +1286,7 @@
                 parent.removeChild(m);
             });
             clone.querySelectorAll('.box').forEach(b => b.classList.remove('kc-has-hit', 'kc-open'));
+            clone.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty'));
             clone.normalize();
             clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
             clone.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
@@ -1220,7 +1307,9 @@
         }
 
         function getCleanTitle() {
-            return pageMainTitle.textContent.trim() === "請輸入文章總標題" ? "" : pageMainTitle.innerHTML;
+            // 舊資料可能仲存住個實體 placeholder，一併當做空
+            const t = pageMainTitle.textContent.trim();
+            return (t === "" || t === "請輸入文章總標題") ? "" : pageMainTitle.innerHTML;
         }
 
         function quickSave(btn, msg) {
@@ -1253,9 +1342,10 @@
             mainContainer.classList.add('editing');
             editHint.style.display = "block";
             bottomBar.style.display = "flex";
+            document.getElementById('aiLangBar').style.display = "flex";
 
             pageMainTitle.style.display = "inline-block";
-            if (pageMainTitle.textContent.trim() === "") pageMainTitle.innerHTML = "請輸入文章總標題";
+            if (pageMainTitle.textContent.trim() === "請輸入文章總標題") pageMainTitle.innerHTML = "";   // 清走舊嘅實體 placeholder
             pageMainTitle.setAttribute('contenteditable', 'true');
 
             // 一入嚟全部縮埋，淨係見到標題；亦唔會自動解鎖（要雙擊）
@@ -1266,11 +1356,13 @@
                 addToolbarToBox(box);
             });
             historyReset();
+            refreshPlaceholders();
             toast('✏️ 編輯模式：單擊標題展開，雙擊解鎖編輯');
         });
 
         function disableEditing() {
             isEditing = false; isDirty = false;
+            document.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty'));
             mainContainer.classList.remove('editing');
             createLinkBtn.style.display = "none"; addBoxBtn.style.display = "none";
             undoBtn.style.display = "none"; redoBtn.style.display = "none";
@@ -1319,10 +1411,10 @@
             // 新區塊嘅「訪客預設」= 縮埋（冇 active class）；要展開就自己撳個 📕 掣
             const newBox = document.createElement('div');
             newBox.className = 'box edit-open';
-            newBox.innerHTML = `<div class="box-header" contenteditable="true">新標題</div><div class="box-content" contenteditable="true"><p>請輸入內容...</p></div>`;
+            newBox.innerHTML = `<div class="box-header" contenteditable="true"></div><div class="box-content" contenteditable="true"></div>`;
             cabinetContent.appendChild(newBox);
             addToolbarToBox(newBox);
-            markDirty(); commit();
+            markDirty(); commit(); refreshPlaceholders();
             newBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
             const h = newBox.querySelector('.box-header');
             setTimeout(() => h.focus(), 300);
@@ -1359,7 +1451,7 @@
            =================================================================== */
         document.addEventListener('input', e => {
             if (e.target && e.target.closest && e.target.closest('#aiPanel')) return;   // AI 對話框唔算改文章
-            markDirty(); scheduleCommit();
+            markDirty(); scheduleCommit(); refreshPlaceholders();
         }, true);
         document.addEventListener('keydown', e => {
             if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -1383,6 +1475,178 @@
             if (isEditing && isDirty) { e.preventDefault(); e.returnValue = ''; }
         });
 
+
+
+        /* ===================================================================
+           ✨ AI 生成區塊標題
+           ---------------------------------------------------------------
+           用返 AI 對話框嗰套設定（Base URL / Model / Key）。
+           特登唔用串流：淨係要一句短標題，一次過攞返仲快同穩陣。
+           =================================================================== */
+        const TITLE_LANG_KEY = 'kc_title_lang_v1';
+        function titleLang() {
+            const sel = document.getElementById('cfgTitleLang');
+            return sel ? sel.value : 'zh';
+        }
+        (function initTitleLang() {
+            const sel = document.getElementById('cfgTitleLang');
+            if (!sel) return;
+            try { const v = localStorage.getItem(TITLE_LANG_KEY); if (v) sel.value = v; } catch (e) {}
+            sel.addEventListener('change', () => {
+                try { localStorage.setItem(TITLE_LANG_KEY, sel.value); } catch (e) {}
+                toast(sel.value === 'en' ? 'AI titles will be in English' : 'AI 標題會用繁體中文');
+            });
+        })();
+
+        // 一個區塊算唔算「未有標題」：空白，或者仲係舊版嗰個實體 placeholder
+        function isPlaceholderTitle(text) {
+            const t = (text || '').replace(/🔍 \d+ 個$/, '').trim();
+            return t === '' || t === '新標題' || t === '新主題' || t === '請輸入標題';
+        }
+
+        function titlePrompt(lang) {
+            return lang === 'en'
+                ? 'You write section headings. Given the section body, reply with ONE heading only.\n'
+                  + 'Rules:\n1. About 4-8 words. Never a full sentence.\n'
+                  + '2. Describe what the section is actually about — no generic words like "Overview" or "Notes".\n'
+                  + '3. Output the heading text ONLY. No quotes, no punctuation at the end, no explanation, no markdown.'
+                : '你係一個幫人改小標題嘅助手。我會俾一段內容你，你回一個標題。\n'
+                  + '規則：\n1. 大約 10 個字，最多 16 個字。唔好寫成一句完整句子。\n'
+                  + '2. 要切合內容重點，唔好用「概述」「筆記」「內容」呢啲空洞字眼。\n'
+                  + '3. 用繁體中文。\n'
+                  + '4. 淨係回個標題本身，唔好加引號、唔好加句號、唔好解釋、唔好用 Markdown 符號。';
+        }
+
+        function cleanTitleOut(raw) {
+            let t = String(raw || '').trim();
+            t = t.split('\n').map(x => x.trim()).filter(Boolean)[0] || '';   // 淨係要第一行
+            // 外層可能層層疊（## **「標題」**。），所以要一路剝到唔再變為止，
+            // 淨係剝一次嘅話次序一唔啱就會留低半截符號。
+            for (let i = 0; i < 8; i++) {
+                const before = t;
+                t = t.replace(/^#+\s*/, '')
+                     .replace(/^[-*・•]\s*/, '')
+                     .replace(/[。．.!！?？、,，:：;；\s]+$/, '')
+                     .replace(/^\*{1,3}/, '').replace(/\*{1,3}$/, '')
+                     .replace(/^[_~`]+/, '').replace(/[_~`]+$/, '')
+                     .replace(/^["'「『《【\[(（]+/, '')
+                     .replace(/["'」』》】\])）]+$/, '')
+                     .trim();
+                if (t === before) break;
+            }
+            if (t.length > 40) t = t.slice(0, 40);
+            return t;
+        }
+
+        // 唔用串流嘅一次過請求
+        async function aiOnce(messages, maxTokens) {
+            if (!aiCfgOK()) throw new Error('未設定 AI（請撳右下角 ✨ → ⚙️ 填 Base URL / Model / API Key）');
+            const url = aiCfg.base.replace(/\/+$/, '') + '/chat/completions';
+            const body = { model: aiCfg.model, messages, stream: false, max_tokens: maxTokens || 200 };
+            // 改標題唔使深思，關咗思考快好多、又慳 token
+            body.thinking = { type: 'disabled' };
+            let res;
+            try {
+                res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + aiCfg.key },
+                    body: JSON.stringify(body)
+                });
+            } catch (err) {
+                throw new Error('連唔到 API（網絡或者 CORS）：' + err.message);
+            }
+            if (!res.ok) {
+                let detail = '';
+                try { const j = await res.json(); detail = (j.error && (j.error.message || j.error.code)) || JSON.stringify(j).slice(0, 200); }
+                catch (e) { try { detail = (await res.text()).slice(0, 200); } catch (e2) {} }
+                throw new Error('API 回覆 ' + res.status + '：' + detail);
+            }
+            const data = await res.json();
+            const ch = data.choices && data.choices[0];
+            const msg = ch && (ch.message || ch.delta) || {};
+            return String(msg.content || '').trim();
+        }
+
+        async function suggestTitleFor(box, lang) {
+            const content = box.querySelector('.box-content');
+            const body = content ? nodeToText(content) : '';
+            if (!body.trim()) throw new Error('EMPTY');
+            const snippet = body.length > 4000 ? body.slice(0, 4000) : body;   // 一個區塊唔使成篇送
+            const out = await aiOnce([
+                { role: 'system', content: titlePrompt(lang) },
+                { role: 'user', content: (lang === 'en' ? 'Section body:\n' : '內容：\n') + snippet }
+            ], 120);
+            const title = cleanTitleOut(out);
+            if (!title) throw new Error('AI 冇俾到標題');
+            return title;
+        }
+
+        function setBoxTitle(box, title) {
+            const header = box.querySelector('.box-header');
+            if (!header) return;
+            const badge = header.querySelector('.kc-hit-badge');
+            header.textContent = title;
+            if (badge) header.appendChild(badge);
+            header.style.display = 'block';
+        }
+
+        // 單一區塊
+        async function aiTitleOne(box, btn) {
+            if (btn) { btn.classList.add('busy'); btn.innerHTML = '⏳'; }
+            try {
+                flushTyping();
+                const title = await suggestTitleFor(box, titleLang());
+                const header = box.querySelector('.box-header');
+                const old = (header.textContent || '').replace(/🔍 \d+ 個$/, '').trim();
+                if (old && !isPlaceholderTitle(old)) {
+                    if (!confirm(`AI 建議嘅標題：\n\n「${title}」\n\n呢個區塊而家叫「${old}」，要用新嘅取代佢？`)) return;
+                }
+                setBoxTitle(box, title);
+                markDirty(); commit(); refreshPlaceholders();
+                toast('✨ 標題已生成：' + title + '（唔啱撳 Ctrl+Z）');
+            } catch (err) {
+                if (err.message === 'EMPTY') toast('呢個區塊冇內容，AI 唔知寫咩標題好', true);
+                else toast('❌ ' + err.message, true);
+            } finally {
+                if (btn) { btn.classList.remove('busy'); btn.innerHTML = '✨'; }
+            }
+        }
+
+        // 成版：逢空標題就補
+        async function aiTitleAll() {
+            const boxes = [...cabinetContent.querySelectorAll('.box')].filter(b => {
+                const h = b.querySelector('.box-header');
+                const c = b.querySelector('.box-content');
+                return h && isPlaceholderTitle(h.textContent) && c && nodeToText(c).trim();
+            });
+            if (!boxes.length) { toast('冇區塊需要生成標題（有內容但冇標題嗰啲先會處理）'); return; }
+            if (!aiCfgOK()) { toast('請先撳右下角 ✨ → ⚙️ 設定 API', true); return; }
+            const lang = titleLang();
+            if (!confirm(`有 ${boxes.length} 個區塊有內容但冇標題。\n用 AI 一次過幫佢哋生成${lang === 'en' ? '英文' : '中文'}標題？\n\n`
+                + `· 只會處理呢 ${boxes.length} 個，已經有標題嘅一個都唔會郁\n· 做完可以撳 Ctrl+Z 一次過復原`)) return;
+
+            const btn = document.getElementById('bbTitles');
+            btn.disabled = true;
+            flushTyping();
+            let done = 0, failed = 0;
+            for (let i = 0; i < boxes.length; i++) {
+                btn.textContent = `⏳ 生成緊 ${i + 1}/${boxes.length}…`;
+                try {
+                    const t = await suggestTitleFor(boxes[i], lang);
+                    setBoxTitle(boxes[i], t);
+                    done++;
+                    boxes[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch (err) {
+                    failed++;
+                    if (failed >= 3 && done === 0) { toast('❌ 連續失敗：' + err.message, true); break; }
+                }
+            }
+            btn.disabled = false;
+            btn.textContent = '✨ 一次過生成所有缺標題';
+            if (done) { markDirty(); commit(); refreshPlaceholders(); }
+            toast(done ? `✨ 已生成 ${done} 個標題${failed ? `（${failed} 個失敗）` : ''}，唔啱撳 Ctrl+Z` : '❌ 一個都生成唔到', !done);
+        }
+        document.getElementById('bbTitles').addEventListener('click', aiTitleAll);
 
         /* ===================================================================
            🔍 頁內搜尋
@@ -1590,15 +1854,34 @@
         function aiCfgOK() { return aiCfg.base && aiCfg.model && aiCfg.key; }
 
         /* ---------- 放大 / 拉大細 ---------- */
+        // 細螢幕交返俾 CSS 處理（滿屏），JS 唔好再落 inline 尺寸
+        function aiIsSmallScreen() {
+            return window.innerWidth <= 680 || window.innerHeight <= 600;
+        }
         function aiApplySize() {
+            if (aiIsSmallScreen()) { aiPanel.style.width = ''; aiPanel.style.height = ''; return; }
             let sz = null;
             try { sz = JSON.parse(localStorage.getItem(AI_SIZE_KEY) || 'null'); } catch (e) {}
             if (sz && sz.max) { aiPanel.classList.add('max'); return; }
             if (sz && sz.w && sz.h) {
-                aiPanel.style.width = sz.w + 'px';
-                aiPanel.style.height = sz.h + 'px';
+                // 夾返喺而家個視窗入面：喺大 mon 拉到好大嘅尺寸，唔可以原封不動搬去細螢幕
+                aiPanel.style.width = Math.min(sz.w, window.innerWidth - 24) + 'px';
+                aiPanel.style.height = Math.min(sz.h, window.innerHeight - 24) + 'px';
             }
         }
+        // 轉橫直、開關鍵盤、拉窗都會改變可視高度，要重新夾一次
+        let aiResizeTimer = null;
+        function aiReclamp() {
+            clearTimeout(aiResizeTimer);
+            aiResizeTimer = setTimeout(() => {
+                if (aiIsSmallScreen()) { aiPanel.style.width = ''; aiPanel.style.height = ''; return; }
+                const w = parseInt(aiPanel.style.width, 10), h = parseInt(aiPanel.style.height, 10);
+                if (w) aiPanel.style.width = Math.min(w, window.innerWidth - 24) + 'px';
+                if (h) aiPanel.style.height = Math.min(h, window.innerHeight - 24) + 'px';
+            }, 150);
+        }
+        window.addEventListener('resize', aiReclamp);
+        window.addEventListener('orientationchange', aiReclamp);
         // 量返個框而家幾大：優先用實際 render 出嚟嘅尺寸，讀唔到就退返落 inline style / 預設值
         function aiPanelSize() {
             const r = aiPanel.getBoundingClientRect();
@@ -1608,6 +1891,7 @@
             };
         }
         function aiSaveSize(extra) {
+            if (aiIsSmallScreen()) return;   // 手機係滿屏，冇尺寸可言，唔好污染設定
             const cur = aiPanelSize();
             const data = Object.assign({
                 w: cur.w, h: cur.h,
@@ -1616,6 +1900,7 @@
             try { localStorage.setItem(AI_SIZE_KEY, JSON.stringify(data)); } catch (e) {}
         }
         document.getElementById('aiMaxBtn').addEventListener('click', () => {
+            if (aiIsSmallScreen()) { toast('手機版本身已經係滿屏'); return; }
             aiPanel.classList.toggle('max');
             if (!aiPanel.classList.contains('max')) {
                 // 還原返之前自己拉嗰個大細
@@ -2309,6 +2594,7 @@ ctx.text,
 
         // ---------- 掛事件 ----------
         aiFab.addEventListener('click', () => {
+            aiApplySize();              // 每次開都按而家個螢幕重新計，唔好用返舊尺寸
             aiPanel.classList.add('open'); aiFab.style.display = 'none';
             aiUpdateCtxInfo();
             if (!aiCfgOK()) aiSettings.classList.add('open');
