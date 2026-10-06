@@ -1083,11 +1083,27 @@
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
+        // 內容格貼上：決定用 Markdown 轉出嚟嘅、剪貼簿本身嘅 HTML、定純文字
+        // （📥 掣同 Ctrl+V 共用，兩邊結果一定一樣）
+        function decideRichPaste(rawText, rawHtml) {
+            const text = normalizePasted(rawText).trim();
+            const cleanHtml = rawHtml ? sanitizeHTML(rawHtml) : '';
+            // 剪貼簿嗰份 HTML 有冇真格式？（由純文字複製出嚟嗰啲，多數係一堆 span，冇 tag）
+            const hasRealTags = /<(strong|b|em|i|h[1-6]|ul|ol|li|table|pre|blockquote)\b/i.test(cleanHtml);
+            //  · 文字入面有 **粗體** / # 標題 / ``` / | 表格 | → 一定係 Markdown 原始碼，轉佢
+            //  · 冇真格式 tag 而又似 Markdown → 都轉
+            //  · 其餘就用返 HTML（例如由 Word、網頁複製過嚟嗰啲真格式）
+            if (strongMarkdown(text) || (!hasRealTags && looksLikeMarkdown(text)))
+                return { html: aiConvert(text, 'html'), converted: true };
+            if (cleanHtml.trim()) return { html: cleanHtml, converted: false };
+            return { html: escapeHTML(text).replace(/\n/g, '<br>'), converted: false };
+        }
+
         async function pasteInto(el, opts) {
             const data = await readClipboard();
             if (!data) { toast('❌ 讀唔到剪貼簿，請雙擊入去用 Ctrl+V', true); return; }
 
-            const text = (data.text || '').trim();
+            const text = normalizePasted(data.text).trim();
             let incoming, converted = false;
 
             if (opts.plainOnly) {
@@ -1095,21 +1111,7 @@
                 const t = looksLikeMarkdown(text) ? aiConvert(text, 'plain') : text;
                 incoming = escapeHTML(t).replace(/\n/g, ' ');
             } else {
-                const cleanHtml = data.html ? sanitizeHTML(data.html) : '';
-                // 剪貼簿嗰份 HTML 有冇真格式？（由純文字複製出嚟嗰啲，多數係一堆 span，冇 tag）
-                const hasRealTags = /<(strong|b|em|i|h[1-6]|ul|ol|li|table|pre|blockquote)\b/i.test(cleanHtml);
-                // 決定用邊個版本：
-                //  · 文字入面有 **粗體** / # 標題 / ``` → 一定係 Markdown 原始碼，轉佢
-                //  · 冇真格式 tag 而又似 Markdown → 都轉
-                //  · 其餘就用返 HTML（例如由 Word、網頁複製過嚟嗰啲真格式）
-                if (strongMarkdown(text) || (!hasRealTags && looksLikeMarkdown(text))) {
-                    incoming = aiConvert(text, 'html');
-                    converted = true;
-                } else if (cleanHtml.trim()) {
-                    incoming = cleanHtml;
-                } else {
-                    incoming = escapeHTML(text).replace(/\n/g, '<br>');
-                }
+                ({ html: incoming, converted } = decideRichPaste(data.text, data.html));
             }
             if (!incoming.trim()) { toast('剪貼簿係空嘅', true); return; }
 
@@ -1126,6 +1128,40 @@
                 ? '✅ 已貼上，順手將 Markdown 符號轉成真格式（唔啱可以 Ctrl+Z）'
                 : '✅ 已貼上（撳錯咗可以 Ctrl+Z）');
         }
+
+        /* ===================================================================
+           Ctrl+V（雙擊解鎖咗嘅內容格）：之前完全冇攔截，所以 Markdown 一律原文貼入去。
+           而家同 📥 掣行同一套判斷 —— 認到係 Markdown 先接手轉換，貼喺游標位置；
+           其他情況（例如由 Word / 網頁複製嘅真格式）照舊交俾瀏覽器處理，行為唔變。
+           =================================================================== */
+        document.addEventListener('paste', e => {
+            if (!isEditing || !e.clipboardData) return;
+            const el = e.target && e.target.closest && e.target.closest('#mainContainer .box-content[contenteditable="true"]');
+            if (!el) return;
+            const text = e.clipboardData.getData('text/plain');
+            if (!text) return;
+            const { html, converted } = decideRichPaste(text, e.clipboardData.getData('text/html'));
+            if (!converted) return;   // 唔係 Markdown → 由得瀏覽器照舊貼
+
+            e.preventDefault();
+            flushTyping();            // 貼上自成一步，Ctrl+Z 可以單獨復原
+            if (!document.execCommand('insertHTML', false, html)) {
+                // 後備：execCommand 唔得就自己喺游標位置插入
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+                    const range = sel.getRangeAt(0);
+                    range.deleteContents();
+                    const frag = range.createContextualFragment(html);
+                    const last = frag.lastChild;
+                    range.insertNode(frag);
+                    if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+                } else {
+                    el.innerHTML += html;
+                }
+            }
+            markDirty(); commit(); refreshPlaceholders();
+            toast('✅ 已將 Markdown 轉成真格式（唔啱可以 Ctrl+Z）');
+        });
 
         /* ===================================================================
            變為子頁面（全域按鈕 + 每個區塊嘅按鈕共用同一段邏輯）
@@ -2119,13 +2155,41 @@ ctx.text,
             x = x.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
             return x.replace(/\u0003(\d+)\u0003/g, (m, i) => esc[+i]);
         }
-        // 表格分隔線：|---|---|  或者 |:---|---:|
+        /* ---- 貼上 / 轉換之前，先將剪貼簿文字「洗」一次 ----
+           ⚠ 之前表格貼唔到，就係死喺呢度：
+             · Windows 剪貼簿係 \r\n 換行 → 「|…|」後面跟住嘅係 \r 唔係 \n
+             · 由網頁 / contenteditable 複製，行尾嘅空格好多時係 &nbsp;（U+00A0）
+             · 有啲地方每行之間會夾多一行空行
+           轉換器本身應付得到頭兩種，但「認唔認得出係 Markdown」嗰條 regex 應付唔到，
+           於是成段當咗普通文字，轉換器根本冇機會行。 */
+        function normalizePasted(t) {
+            return String(t || '')
+                .replace(/\r\n?/g, '\n')
+                .replace(/ /g, ' ')
+                .replace(/[​‌‍﻿]/g, '');
+        }
+        // 表格分隔線：|---|---|  或者 |:---|---:|（順手收埋 Word / 手機自動變成嘅 – —）
         function aiIsTableSep(l) {
-            const t = String(l).trim();
+            const t = String(l).trim().replace(/[–—]/g, '-');
             if (!t.includes('|') || !t.includes('-')) return false;
             return /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(t);
         }
         function aiIsTableRow(l) { return /^\s*\|.*\|\s*$/.test(l); }
+        // 由第 i 行之後，搵下一行唔係空白嘅行（搵唔到就 -1）
+        function aiNextNonBlank(lines, i) {
+            for (let k = i; k < lines.length; k++) if (lines[k].trim()) return k;
+            return -1;
+        }
+        // 「認表格」同「轉表格」一定要用同一套規則，唔係就會出現認到但轉唔到、或者轉到但認唔到
+        function mdHasTable(t) {
+            const lines = normalizePasted(t).split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                if (!aiIsTableRow(lines[i])) continue;
+                const n = aiNextNonBlank(lines, i + 1);
+                if (n !== -1 && aiIsTableSep(lines[n])) return true;
+            }
+            return false;
+        }
         function aiSplitRow(l) {
             return String(l).trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
         }
@@ -2137,7 +2201,7 @@ ctx.text,
         }
 
         function aiConvert(md, mode) {
-            const lines = String(md || '').replace(/\r/g, '').split('\n');
+            const lines = normalizePasted(md).split('\n');
             const inline = mode === 'html' ? aiInlineHtml : (mode === 'wa' ? aiInlineWa : aiInlinePlain);
             const out = [];
             let inCode = false, code = [];
@@ -2169,13 +2233,25 @@ ctx.text,
                 if (!line.trim()) { closeAllLists(); if (mode !== 'html') out.push(''); continue; }
 
                 // ---- 表格：一行 |…|…| 之後跟住一行 |---|---| ----
-                if (aiIsTableRow(line) && i + 1 < lines.length && aiIsTableSep(lines[i + 1])) {
+                // （中間夾咗空行都照認：有啲地方複製出嚟每行之間會多咗一行空行）
+                const sepAt = aiIsTableRow(line) ? aiNextNonBlank(lines, i + 1) : -1;
+                if (sepAt !== -1 && aiIsTableSep(lines[sepAt])) {
                     closeAllLists();
                     const head = aiSplitRow(line);
-                    const aligns = aiSplitRow(lines[i + 1]).map(aiAlignOf);
+                    const aligns = aiSplitRow(lines[sepAt]).map(aiAlignOf);
                     const rows = [];
-                    let j = i + 2;
-                    while (j < lines.length && aiIsTableRow(lines[j])) { rows.push(aiSplitRow(lines[j])); j++; }
+                    let j = sepAt + 1;
+                    while (true) {
+                        const n = aiNextNonBlank(lines, j);
+                        if (n === -1 || !aiIsTableRow(lines[n])) break;
+                        // 隔咗空行先見到嘅 |…|，如果下面跟住 |---|，其實係下一個新表格嘅表頭，唔好食埋
+                        if (n > j) {
+                            const after = aiNextNonBlank(lines, n + 1);
+                            if (after !== -1 && aiIsTableSep(lines[after])) break;
+                        }
+                        rows.push(aiSplitRow(lines[n]));
+                        j = n + 1;
+                    }
                     i = j - 1;
 
                     if (mode === 'html') {
@@ -2263,6 +2339,7 @@ ctx.text,
         /* ---- 貼上嘅時候，認唔認得出啲 Markdown 符號 ---- */
         function looksLikeMarkdown(t) {
             if (!t) return false;
+            t = normalizePasted(t);
             return /\*\*[^*\n]+\*\*/.test(t)              // **粗體**
                 || /^\s*#{1,6}\s+\S/m.test(t)             // # 標題
                 || /^[ \t]*[-*+]\s+\S/m.test(t)           // - 列點
@@ -2270,7 +2347,7 @@ ctx.text,
                 || /```/.test(t)                          // 程式碼區塊
                 || /^\s*>\s+\S/m.test(t)                  // > 引言
                 || /\[[^\]]+\]\([^)\s]+\)/.test(t)        // [文字](網址)
-                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t)    // | 表格 |
+                || mdHasTable(t)                          // | 表格 |（同轉換器用同一套規則）
                 // 連續嘅反斜線轉義，例如傳真封面嗰啲 \_\_\_\_ 填充橫線。
                 // 特登要求「連續兩個或以上」同埋限死幾個常見符號，
                 // 唔係嘅話貼段 regex（例如 \d+\.\d+）都會俾人當成 Markdown 拆咗佢。
@@ -2278,8 +2355,9 @@ ctx.text,
         }
         // 呢幾種符號幾乎唔會喺「已經有格式」嘅內容度出現，見到就當佢係 Markdown 原始碼
         function strongMarkdown(t) {
-            return !!t && (/\*\*[^*\n]+\*\*/.test(t) || /^\s*#{1,6}\s+\S/m.test(t) || /```/.test(t)
-                || /^[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[\s:|-]*-[\s:|-]*\|/m.test(t));
+            if (!t) return false;
+            t = normalizePasted(t);
+            return /\*\*[^*\n]+\*\*/.test(t) || /^\s*#{1,6}\s+\S/m.test(t) || /```/.test(t) || mdHasTable(t);
         }
 
         async function aiCopyAs(md, fmt) {
