@@ -236,6 +236,85 @@
             busyOverlay.style.display = on ? 'flex' : 'none';
             if (msg) busyMsg.textContent = msg;
         }
+        /* ===================================================================
+           確認／輸入對話框：代替瀏覽器本身嘅 confirm() / prompt()
+           ---------------------------------------------------------------
+           ⚠ 點解要咁做：Chrome 見到一頁彈太多對話框，會喺對話框加個
+           「唔好再俾呢頁彈出對話框」嘅剔格。一剔咗（例如 hang 機嗰陣亂撳），
+           之後同一個分頁、同一個網站（index / page / 後台全部計埋）所有
+           confirm() 都會即刻靜靜雞 return false，prompt() 即刻 return null ——
+           睇落就係「撳刪除完全冇反應」。
+           所以：照用原生對話框；但如果佢喺 60ms 內就答咗（真人冇可能咁快撳），
+           就當係俾 Chrome 封鎖咗，改為彈一個頁面自己畫嘅對話框。
+           =================================================================== */
+        function kcDialog(message, opts) {
+            opts = opts || {};
+            if (!document.getElementById('kcDlgStyle')) {
+                const st = document.createElement('style');
+                st.id = 'kcDlgStyle';
+                st.textContent =
+                    '.kc-dlg-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px}' +
+                    '.kc-dlg{background:#fff;color:#2c3e50;border-radius:10px;padding:22px;width:min(460px,100%);box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:"Helvetica Neue",Arial,sans-serif}' +
+                    '.kc-dlg-msg{white-space:pre-wrap;font-size:14px;line-height:1.7;max-height:55vh;overflow:auto}' +
+                    '.kc-dlg-in{width:100%;box-sizing:border-box;margin-top:12px;padding:9px;border:1px solid #cfd6dd;border-radius:6px;font-size:14px}' +
+                    '.kc-dlg-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}' +
+                    '.kc-dlg-row button{border:none;border-radius:6px;padding:9px 16px;font-weight:bold;cursor:pointer;font-size:13px}' +
+                    '.kc-dlg-ok{background:#27ae60;color:#fff}.kc-dlg-no{background:#bdc3c7;color:#2c3e50}';
+                document.head.appendChild(st);
+            }
+            return new Promise(resolve => {
+                const ov = document.createElement('div');
+                ov.className = 'kc-dlg-ov';
+                ov.innerHTML = '<div class="kc-dlg" role="dialog" aria-modal="true"><div class="kc-dlg-msg"></div>'
+                    + (opts.input ? '<input class="kc-dlg-in" type="text">' : '')
+                    + '<div class="kc-dlg-row"><button type="button" class="kc-dlg-no">取消</button>'
+                    + '<button type="button" class="kc-dlg-ok">確定</button></div></div>';
+                ov.querySelector('.kc-dlg-msg').textContent = message;
+                const inp = ov.querySelector('.kc-dlg-in');
+                if (inp) inp.value = opts.value == null ? '' : opts.value;
+                // 唔俾 mousedown 傳出去：唔係嘅話頁面嗰個「撳出面就自動儲存」會當咗你離開咗個方塊
+                ov.addEventListener('mousedown', e => e.stopPropagation());
+                function done(ok) {
+                    document.removeEventListener('keydown', onKey, true);
+                    ov.remove();
+                    resolve(opts.input ? (ok ? inp.value : null) : ok);
+                }
+                function onKey(e) {
+                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done(true); }
+                }
+                ov.querySelector('.kc-dlg-ok').onclick = () => done(true);
+                ov.querySelector('.kc-dlg-no').onclick = () => done(false);
+                document.addEventListener('keydown', onKey, true);
+                document.body.appendChild(ov);
+                (inp || ov.querySelector('.kc-dlg-ok')).focus();
+            });
+        }
+        let kcDialogsBlockedWarned = false;
+        function kcNoteBlocked() {
+            if (kcDialogsBlockedWarned) return;
+            kcDialogsBlockedWarned = true;
+            try { toast('⚠️ Chrome 封鎖咗呢個分頁嘅彈出視窗，已改用頁面內嘅確認框。想回復正常：關咗呢個分頁，開個新分頁再入。', true); } catch (e) {}
+        }
+        async function kcConfirm(message) {
+            const t0 = performance.now();
+            let r = false;
+            try { r = window.confirm(message); } catch (e) {}
+            if (r) return true;
+            if (performance.now() - t0 > 60) return false;   // 真人撳咗「取消」
+            kcNoteBlocked();
+            return kcDialog(message);
+        }
+        async function kcPrompt(message, value) {
+            const t0 = performance.now();
+            let r = null;
+            try { r = window.prompt(message, value == null ? '' : value); } catch (e) {}
+            if (r !== null) return r;
+            if (performance.now() - t0 > 60) return null;
+            kcNoteBlocked();
+            return kcDialog(message, { input: true, value: value });
+        }
+
         function markDirty() { if (isEditing) isDirty = true; }
         function zoneOf(el) { return (el && el.closest && el.closest('#privateContent')) ? 'private' : 'public'; }
         function paths(zone) {
@@ -289,7 +368,7 @@
         // 一路問到你俾個合法又冇人用嘅 ID 為止；撳取消就 return null
         async function askUniqueId(headline) {
             while (true) {
-                const raw = prompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', '');
+                const raw = (await kcPrompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', ''));
                 if (raw === null) return null;
                 if (raw.trim() === '') {
                     let auto = null;
@@ -622,7 +701,7 @@
                 backupBtn.innerText = "📥 備份";
             }
         });
-        restoreBtn.addEventListener('click', () => { if(confirm("⚠️ 匯入將覆蓋備份檔內有嘅節點！確定繼續？")) restoreFile.click(); });
+        restoreBtn.addEventListener('click', async () => { if((await kcConfirm("⚠️ 匯入將覆蓋備份檔內有嘅節點！確定繼續？"))) restoreFile.click(); });
         restoreFile.addEventListener('change', (e) => {
             const file = e.target.files[0]; if(!file) return;
             const reader = new FileReader();
@@ -785,7 +864,7 @@
                     ? `\n⚠ 搬完之後：\n• 舊連結會失效，之前分享咗俾人嘅 link 一律開唔到\n• 只有你登入咗先睇得到`
                     : `\n⚠ 搬完之後：\n• 呢 ${allIds.length} 頁會變成任何人攞到連結都睇得到\n• 舊嘅私人連結（帶 &zone=private）會失效`);
 
-            if (!confirm(msg + detail)) { restoreDragPosition(el, origin); return; }
+            if (!(await kcConfirm(msg + detail))) { restoreDragPosition(el, origin); return; }
 
             try {
                 busy(true, `正在搬遷 ${allIds.length} 頁…`);
@@ -827,7 +906,7 @@
         async function relinkExisting(cat) {
             const zone = zoneOf(cat);
             const P = paths(zone);
-            const raw = prompt('請輸入想加返入目錄嗰篇文章嘅 ID：\n（喺 🗄️ 進入後台 嗰度可以睇返所有頁面同佢哋嘅 ID）', '');
+            const raw = (await kcPrompt('請輸入想加返入目錄嗰篇文章嘅 ID：\n（喺 🗄️ 進入後台 嗰度可以睇返所有頁面同佢哋嘅 ID）', ''));
             if (raw === null) return;
             const id = normalizeId(raw);
             const bad = idProblem(id);
@@ -851,7 +930,7 @@
             ]);
             const parent = parentSnap.val();
             if (parent && parent !== 'index') {
-                if (!confirm(`⚠️ 呢篇文章而家係【${parent}】嘅子頁面。\n加返入目錄會將佢變成頂層文章，佢嘅麵包屑導航會跟住改。\n\n確定繼續？`)) return;
+                if (!(await kcConfirm(`⚠️ 呢篇文章而家係【${parent}】嘅子頁面。\n加返入目錄會將佢變成頂層文章，佢嘅麵包屑導航會跟住改。\n\n確定繼續？`))) return;
             }
 
             const inPrivate = zone === 'private';
@@ -946,15 +1025,15 @@
             });
 
             document.querySelectorAll('.del-cat').forEach(btn => {
-                btn.onclick = function() {
-                    if(!confirm('確定刪除分類及所有文章？\n（文章內容仍然留喺雲端，可以喺後台睇返「孤立」頁面）')) return;
+                btn.onclick = async function() {
+                    if(!(await kcConfirm('確定刪除分類及所有文章？\n（文章內容仍然留喺雲端，可以喺後台睇返「孤立」頁面）'))) return;
                     this.closest('.category').remove();
                     markDirty(); scheduleAutoSave(); decorateCategories();
                 };
             });
             document.querySelectorAll('.del-link').forEach(btn => {
-                btn.onclick = function() {
-                    if(!confirm('確定移除連結？\n（文章內容仍然留喺雲端）')) return;
+                btn.onclick = async function() {
+                    if(!(await kcConfirm('確定移除連結？\n（文章內容仍然留喺雲端）'))) return;
                     this.closest('.link-item').remove();
                     markDirty(); scheduleAutoSave(); decorateCategories();
                 };

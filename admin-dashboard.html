@@ -181,6 +181,85 @@
             toastEl._t = setTimeout(() => toastEl.style.display = 'none', 3800);
         }
         function busy(on, msg) { busyEl.style.display = on ? 'flex' : 'none'; if (msg) busyMsg.textContent = msg; }
+        /* ===================================================================
+           確認／輸入對話框：代替瀏覽器本身嘅 confirm() / prompt()
+           ---------------------------------------------------------------
+           ⚠ 點解要咁做：Chrome 見到一頁彈太多對話框，會喺對話框加個
+           「唔好再俾呢頁彈出對話框」嘅剔格。一剔咗（例如 hang 機嗰陣亂撳），
+           之後同一個分頁、同一個網站（index / page / 後台全部計埋）所有
+           confirm() 都會即刻靜靜雞 return false，prompt() 即刻 return null ——
+           睇落就係「撳刪除完全冇反應」。
+           所以：照用原生對話框；但如果佢喺 60ms 內就答咗（真人冇可能咁快撳），
+           就當係俾 Chrome 封鎖咗，改為彈一個頁面自己畫嘅對話框。
+           =================================================================== */
+        function kcDialog(message, opts) {
+            opts = opts || {};
+            if (!document.getElementById('kcDlgStyle')) {
+                const st = document.createElement('style');
+                st.id = 'kcDlgStyle';
+                st.textContent =
+                    '.kc-dlg-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px}' +
+                    '.kc-dlg{background:#fff;color:#2c3e50;border-radius:10px;padding:22px;width:min(460px,100%);box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:"Helvetica Neue",Arial,sans-serif}' +
+                    '.kc-dlg-msg{white-space:pre-wrap;font-size:14px;line-height:1.7;max-height:55vh;overflow:auto}' +
+                    '.kc-dlg-in{width:100%;box-sizing:border-box;margin-top:12px;padding:9px;border:1px solid #cfd6dd;border-radius:6px;font-size:14px}' +
+                    '.kc-dlg-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}' +
+                    '.kc-dlg-row button{border:none;border-radius:6px;padding:9px 16px;font-weight:bold;cursor:pointer;font-size:13px}' +
+                    '.kc-dlg-ok{background:#27ae60;color:#fff}.kc-dlg-no{background:#bdc3c7;color:#2c3e50}';
+                document.head.appendChild(st);
+            }
+            return new Promise(resolve => {
+                const ov = document.createElement('div');
+                ov.className = 'kc-dlg-ov';
+                ov.innerHTML = '<div class="kc-dlg" role="dialog" aria-modal="true"><div class="kc-dlg-msg"></div>'
+                    + (opts.input ? '<input class="kc-dlg-in" type="text">' : '')
+                    + '<div class="kc-dlg-row"><button type="button" class="kc-dlg-no">取消</button>'
+                    + '<button type="button" class="kc-dlg-ok">確定</button></div></div>';
+                ov.querySelector('.kc-dlg-msg').textContent = message;
+                const inp = ov.querySelector('.kc-dlg-in');
+                if (inp) inp.value = opts.value == null ? '' : opts.value;
+                // 唔俾 mousedown 傳出去：唔係嘅話頁面嗰個「撳出面就自動儲存」會當咗你離開咗個方塊
+                ov.addEventListener('mousedown', e => e.stopPropagation());
+                function done(ok) {
+                    document.removeEventListener('keydown', onKey, true);
+                    ov.remove();
+                    resolve(opts.input ? (ok ? inp.value : null) : ok);
+                }
+                function onKey(e) {
+                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done(true); }
+                }
+                ov.querySelector('.kc-dlg-ok').onclick = () => done(true);
+                ov.querySelector('.kc-dlg-no').onclick = () => done(false);
+                document.addEventListener('keydown', onKey, true);
+                document.body.appendChild(ov);
+                (inp || ov.querySelector('.kc-dlg-ok')).focus();
+            });
+        }
+        let kcDialogsBlockedWarned = false;
+        function kcNoteBlocked() {
+            if (kcDialogsBlockedWarned) return;
+            kcDialogsBlockedWarned = true;
+            try { toast('⚠️ Chrome 封鎖咗呢個分頁嘅彈出視窗，已改用頁面內嘅確認框。想回復正常：關咗呢個分頁，開個新分頁再入。', true); } catch (e) {}
+        }
+        async function kcConfirm(message) {
+            const t0 = performance.now();
+            let r = false;
+            try { r = window.confirm(message); } catch (e) {}
+            if (r) return true;
+            if (performance.now() - t0 > 60) return false;   // 真人撳咗「取消」
+            kcNoteBlocked();
+            return kcDialog(message);
+        }
+        async function kcPrompt(message, value) {
+            const t0 = performance.now();
+            let r = null;
+            try { r = window.prompt(message, value == null ? '' : value); } catch (e) {}
+            if (r !== null) return r;
+            if (performance.now() - t0 > 60) return null;
+            kcNoteBlocked();
+            return kcDialog(message, { input: true, value: value });
+        }
+
 
         function paths(zone) {
             const p = zone === 'private' ? 'private_' : '';
@@ -405,7 +484,7 @@
                 + (toPrivate
                     ? '\n⚠ 搬完之後舊連結會失效，只有你登入咗先睇得到。'
                     : `\n⚠ 搬完之後呢 ${ids.length} 頁會變成任何人攞到連結都睇得到。`);
-            if (!confirm(msg + '\n\n確定？')) return;
+            if (!(await kcConfirm(msg + '\n\n確定？'))) return;
 
             try {
                 busy(true, '檢查中…');
@@ -491,8 +570,8 @@
         let FIXABLE = [];   // 孤立、但偵測到剛好一個父嘅頁面
 
         async function applyDetected(id, zone, parent) {
-            if (!confirm(`將「${id}」嘅父層級設做「${parent === 'index' ? '總目錄' : parent}」？\n\n`
-                + `（呢個係掃描所有頁面內容之後搵到嘅：${parent === 'index' ? '總目錄' : '「' + parent + '」'}入面有一條 link 指住呢頁。）`)) return;
+            if (!(await kcConfirm(`將「${id}」嘅父層級設做「${parent === 'index' ? '總目錄' : parent}」？\n\n`
+                + `（呢個係掃描所有頁面內容之後搵到嘅：${parent === 'index' ? '總目錄' : '「' + parent + '」'}入面有一條 link 指住呢頁。）`))) return;
             try {
                 busy(true, '更新中…');
                 await db.ref(paths(zone).parents + '/' + id).set(parent);
@@ -505,9 +584,9 @@
         document.getElementById('fixAllBtn').onclick = async () => {
             if (!FIXABLE.length) return;
             const list = FIXABLE.slice(0, 25).map(x => `· ${x.id} → ${x.parent === 'index' ? '總目錄' : x.parent}`).join('\n');
-            if (!confirm(`偵測到 ${FIXABLE.length} 個孤立頁面，其實有頁面 link 住佢哋。\n一次過補返佢哋嘅父層級？\n\n`
+            if (!(await kcConfirm(`偵測到 ${FIXABLE.length} 個孤立頁面，其實有頁面 link 住佢哋。\n一次過補返佢哋嘅父層級？\n\n`
                 + list + (FIXABLE.length > 25 ? `\n…（仲有 ${FIXABLE.length - 25} 個）` : '')
-                + '\n\n只會改父層級紀錄，唔會郁你任何文章內容。')) return;
+                + '\n\n只會改父層級紀錄，唔會郁你任何文章內容。'))) return;
             try {
                 busy(true, `修復緊 ${FIXABLE.length} 個…`);
                 await Promise.all(FIXABLE.map(x => db.ref(paths(x.zone).parents + '/' + x.id).set(x.parent)));
@@ -616,9 +695,9 @@
 
         async function deletePage(id, zone) {
             const kids = collectSubtree(id, zone).filter(x => x !== id);
-            if (!confirm(`⚠️ 極度危險：確定要徹底刪除 ${zone === 'private' ? '【私人區】' : '【公開區】'} Page ID [${id}] 嗎？\n`
+            if (!(await kcConfirm(`⚠️ 極度危險：確定要徹底刪除 ${zone === 'private' ? '【私人區】' : '【公開區】'} Page ID [${id}] 嗎？\n`
                 + (kids.length ? `\n注意：佢下面仲有 ${kids.length} 個子頁面，佢哋【唔會】被刪，但會變成孤立頁面。\n` : '')
-                + '\n刪除後無法復原！')) return;
+                + '\n刪除後無法復原！'))) return;
             try {
                 busy(true, '刪除中…');
                 const P = paths(zone);

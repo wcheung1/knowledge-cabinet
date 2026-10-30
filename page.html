@@ -549,7 +549,7 @@
         // 一路問到你俾個合法又冇人用嘅 ID 為止；撳取消就 return null
         async function askUniqueId(headline) {
             while (true) {
-                const raw = prompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', '');
+                const raw = await kcPrompt(headline + '\n\n（留空 = 自動生成一個保證唔會撞嘅 ID）', '');
                 if (raw === null) return null;
                 if (raw.trim() === '') {
                     let auto = null;
@@ -619,10 +619,93 @@
         }
         function markDirty() { if (isEditing) isDirty = true; }
 
+        /* ===================================================================
+           確認／輸入對話框：代替瀏覽器本身嘅 confirm() / prompt()
+           ---------------------------------------------------------------
+           ⚠ 點解要咁做：Chrome 見到一頁彈太多對話框，會喺對話框加個
+           「唔好再俾呢頁彈出對話框」嘅剔格。一剔咗（例如 hang 機嗰陣亂撳），
+           之後同一個分頁、同一個網站（index / page / 後台全部計埋）所有
+           confirm() 都會即刻靜靜雞 return false，prompt() 即刻 return null ——
+           睇落就係「撳刪除完全冇反應」。
+           所以：照用原生對話框；但如果佢喺 60ms 內就答咗（真人冇可能咁快撳），
+           就當係俾 Chrome 封鎖咗，改為彈一個頁面自己畫嘅對話框。
+           =================================================================== */
+        function kcDialog(message, opts) {
+            opts = opts || {};
+            if (!document.getElementById('kcDlgStyle')) {
+                const st = document.createElement('style');
+                st.id = 'kcDlgStyle';
+                st.textContent =
+                    '.kc-dlg-ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px}' +
+                    '.kc-dlg{background:#fff;color:#2c3e50;border-radius:10px;padding:22px;width:min(460px,100%);box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:"Helvetica Neue",Arial,sans-serif}' +
+                    '.kc-dlg-msg{white-space:pre-wrap;font-size:14px;line-height:1.7;max-height:55vh;overflow:auto}' +
+                    '.kc-dlg-in{width:100%;box-sizing:border-box;margin-top:12px;padding:9px;border:1px solid #cfd6dd;border-radius:6px;font-size:14px}' +
+                    '.kc-dlg-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}' +
+                    '.kc-dlg-row button{border:none;border-radius:6px;padding:9px 16px;font-weight:bold;cursor:pointer;font-size:13px}' +
+                    '.kc-dlg-ok{background:#27ae60;color:#fff}.kc-dlg-no{background:#bdc3c7;color:#2c3e50}';
+                document.head.appendChild(st);
+            }
+            return new Promise(resolve => {
+                const ov = document.createElement('div');
+                ov.className = 'kc-dlg-ov';
+                ov.innerHTML = '<div class="kc-dlg" role="dialog" aria-modal="true"><div class="kc-dlg-msg"></div>'
+                    + (opts.input ? '<input class="kc-dlg-in" type="text">' : '')
+                    + '<div class="kc-dlg-row"><button type="button" class="kc-dlg-no">取消</button>'
+                    + '<button type="button" class="kc-dlg-ok">確定</button></div></div>';
+                ov.querySelector('.kc-dlg-msg').textContent = message;
+                const inp = ov.querySelector('.kc-dlg-in');
+                if (inp) inp.value = opts.value == null ? '' : opts.value;
+                // 唔俾 mousedown 傳出去：唔係嘅話頁面嗰個「撳出面就自動儲存」會當咗你離開咗個方塊
+                ov.addEventListener('mousedown', e => e.stopPropagation());
+                function done(ok) {
+                    document.removeEventListener('keydown', onKey, true);
+                    ov.remove();
+                    resolve(opts.input ? (ok ? inp.value : null) : ok);
+                }
+                function onKey(e) {
+                    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+                    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done(true); }
+                }
+                ov.querySelector('.kc-dlg-ok').onclick = () => done(true);
+                ov.querySelector('.kc-dlg-no').onclick = () => done(false);
+                document.addEventListener('keydown', onKey, true);
+                document.body.appendChild(ov);
+                (inp || ov.querySelector('.kc-dlg-ok')).focus();
+            });
+        }
+        let kcDialogsBlockedWarned = false;
+        function kcNoteBlocked() {
+            if (kcDialogsBlockedWarned) return;
+            kcDialogsBlockedWarned = true;
+            try { toast('⚠️ Chrome 封鎖咗呢個分頁嘅彈出視窗，已改用頁面內嘅確認框。想回復正常：關咗呢個分頁，開個新分頁再入。', true); } catch (e) {}
+        }
+        async function kcConfirm(message) {
+            const t0 = performance.now();
+            let r = false;
+            try { r = window.confirm(message); } catch (e) {}
+            if (r) return true;
+            if (performance.now() - t0 > 60) return false;   // 真人撳咗「取消」
+            kcNoteBlocked();
+            return kcDialog(message);
+        }
+        async function kcPrompt(message, value) {
+            const t0 = performance.now();
+            let r = null;
+            try { r = window.prompt(message, value == null ? '' : value); } catch (e) {}
+            if (r !== null) return r;
+            if (performance.now() - t0 > 60) return null;
+            kcNoteBlocked();
+            return kcDialog(message, { input: true, value: value });
+        }
+
         // 一個格「睇落係空」嘅定義：得空白、或者淨係得 <br> / 空 <p> 呢啲殘留
+        // ⚠ 每打一個字都會行一次（逐個區塊行）。以前用 textContent 會將成格幾十萬字
+        // 砌做一條字串先睇係咪空，格入面字多就每撳一個鍵都 lag。
+        // 而家搵到第一粒唔係空白嘅字就即刻停。
         function kcIsBlank(el) {
             if (!el) return false;
-            if (el.textContent.trim() !== '') return false;
+            const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            while (w.nextNode()) if (/\S/.test(w.currentNode.nodeValue)) return false;
             return !el.querySelector('img, table, hr, iframe, video, svg');
         }
         function refreshPlaceholders() {
@@ -839,6 +922,7 @@
            =================================================================== */
         let history = [], hIndex = -1, typingTimer = null, applyingHistory = false;
         const HISTORY_MAX = 60;
+        const HISTORY_MAX_CHARS = 30 * 1000 * 1000;   // 所有復原步驟加埋最多大約 3,000 萬字
         const undoBtn = document.getElementById('undoBtn');
         const redoBtn = document.getElementById('redoBtn');
 
@@ -869,6 +953,12 @@
             history = history.slice(0, hIndex + 1);
             history.push(s); hIndex++;
             if (history.length > HISTORY_MAX) { history.shift(); hIndex--; }
+            // 每一步都係成頁嘅副本：一頁有幾 MB 嘅話，60 步就係幾百 MB 記憶體。
+            // 所以總量超過上限就由最舊嗰步開始丟（最少留返 2 步，Ctrl+Z 至少救到一次）。
+            let total = history.reduce((n, h) => n + h.content.length, 0);
+            while (total > HISTORY_MAX_CHARS && history.length > 2) {
+                total -= history[0].content.length; history.shift(); hIndex--;
+            }
             updateHistBtns();
         }
         function scheduleCommit() {   // 打字：停手 0.7 秒先當一步
@@ -1105,6 +1195,7 @@
 
             const text = normalizePasted(data.text).trim();
             let incoming, converted = false;
+            if (!(await okToPasteBig(text))) return;
 
             if (opts.plainOnly) {
                 // 標題唔要任何 tag：有 Markdown 符號就直接剝走佢哋
@@ -1118,49 +1209,98 @@
             flushTyping();
             const existing = el.textContent.trim();
             if (existing !== '') {
-                const overwrite = confirm(`「${opts.label}」已經有嘢喺度。\n\n按【確定】= 覆蓋\n按【取消】= 貼喺現有內容後面`);
+                const overwrite = await kcConfirm(`「${opts.label}」已經有嘢喺度。\n\n按【確定】= 覆蓋\n按【取消】= 貼喺現有內容後面`);
                 if (overwrite) el.innerHTML = incoming; else el.innerHTML = el.innerHTML + (opts.plainOnly ? ' ' : '') + incoming;
             } else {
                 el.innerHTML = incoming;
             }
-            markDirty(); commit();
+            markDirty(); commit(); scheduleAutoSave();
             toast(converted
                 ? '✅ 已貼上，順手將 Markdown 符號轉成真格式（唔啱可以 Ctrl+Z）'
                 : '✅ 已貼上（撳錯咗可以 Ctrl+Z）');
         }
 
         /* ===================================================================
-           Ctrl+V（雙擊解鎖咗嘅內容格）：之前完全冇攔截，所以 Markdown 一律原文貼入去。
-           而家同 📥 掣行同一套判斷 —— 認到係 Markdown 先接手轉換，貼喺游標位置；
-           其他情況（例如由 Word / 網頁複製嘅真格式）照舊交俾瀏覽器處理，行為唔變。
+           大段貼上嘅保險
+           ---------------------------------------------------------------
+           · Firebase 一個值最多 10MB（中文一個字佔 3 bytes，即大約 300 萬字），
+             超過咗成頁都存唔到。
+           · 遠未到 10MB 之前，一個區塊放幾十萬字已經會令 Chrome 好慢。
+           所以：超過 BIG_PASTE_CHARS 先問一聲；大到存唔到就直接唔俾貼。
            =================================================================== */
-        document.addEventListener('paste', e => {
+        const BIG_PASTE_CHARS = 150000;                 // 大約 15 萬字
+        const FIREBASE_MAX_BYTES = 9.5 * 1024 * 1024;   // 留返少少位，唔好貼正 10MB
+        function byteSize(s) { return new Blob([s]).size; }
+        function fmtSize(bytes) {
+            return bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+        }
+        // return true = 照貼；false = 唔貼
+        async function okToPasteBig(text) {
+            if (text.length <= BIG_PASTE_CHARS) return true;
+            const bytes = byteSize(text);
+            const wan = (text.length / 10000).toFixed(text.length >= 100000 ? 0 : 1);
+            if (bytes > FIREBASE_MAX_BYTES) {
+                await kcDialog(`❌ 呢段嘢太大（大約 ${wan} 萬字，${fmtSize(bytes)}）。\n\n`
+                    + `Firebase 一頁最多存到 10 MB，貼咗落去成頁都會存唔到。\n`
+                    + `請拆開幾份，分開放落唔同嘅子頁面。`);
+                return false;
+            }
+            return kcConfirm(`⚠️ 你貼緊大約 ${wan} 萬字（${fmtSize(bytes)}）。\n\n`
+                + `咁大段嘢塞落一個區塊，部電腦可能會慢好多，甚至停咗一陣。\n`
+                + `建議拆開幾個區塊，或者整做子頁面。\n\n`
+                + `仲係要貼？`);
+        }
+
+        /* ===================================================================
+           Ctrl+V（雙擊解鎖咗嘅內容格）
+           · 認到係 Markdown → 接手轉換，貼喺游標位置
+           · 好大段 → 先問一聲；照貼嘅話用快嘅方法插入（唔保留由 Word／網頁帶過嚟嘅格式）
+           · 其他情況（細段、由 Word / 網頁複製嘅真格式）照舊交俾瀏覽器處理
+           ⚠ 上一版用 execCommand('insertHTML') 插入：細段冇問題，但佢嘅時間係
+             隨住內容大細「加速」上升（2MB 文字喺快機都要 25 秒），大檔就會 hang 機。
+             而家大段一律用 Range 直接插入 DOM，2MB 都係一兩秒內。
+           =================================================================== */
+        function insertHtmlAtRange(el, range, html) {
+            if (range && el.contains(range.commonAncestorContainer)) {
+                range.deleteContents();
+                const frag = range.createContextualFragment(html);
+                const last = frag.lastChild;
+                range.insertNode(frag);
+                if (last) {
+                    const sel = window.getSelection();
+                    range.setStartAfter(last); range.collapse(true);
+                    sel.removeAllRanges(); sel.addRange(range);
+                }
+            } else {
+                el.insertAdjacentHTML('beforeend', html);
+            }
+        }
+        document.addEventListener('paste', async e => {
             if (!isEditing || !e.clipboardData) return;
             const el = e.target && e.target.closest && e.target.closest('#mainContainer .box-content[contenteditable="true"]');
             if (!el) return;
             const text = e.clipboardData.getData('text/plain');
             if (!text) return;
-            const { html, converted } = decideRichPaste(text, e.clipboardData.getData('text/html'));
-            if (!converted) return;   // 唔係 Markdown → 由得瀏覽器照舊貼
+            const big = text.length > BIG_PASTE_CHARS;
+            let { html, converted } = decideRichPaste(text, e.clipboardData.getData('text/html'));
+            if (!converted && !big) return;   // 普通細段 → 由得瀏覽器照舊貼
 
+            // preventDefault 一定要喺任何 await 之前做，同埋要趁仲未彈對話框記低游標位置
             e.preventDefault();
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
             flushTyping();            // 貼上自成一步，Ctrl+Z 可以單獨復原
-            if (!document.execCommand('insertHTML', false, html)) {
-                // 後備：execCommand 唔得就自己喺游標位置插入
-                const sel = window.getSelection();
-                if (sel && sel.rangeCount && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
-                    const range = sel.getRangeAt(0);
-                    range.deleteContents();
-                    const frag = range.createContextualFragment(html);
-                    const last = frag.lastChild;
-                    range.insertNode(frag);
-                    if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
-                } else {
-                    el.innerHTML += html;
-                }
+
+            if (big) {
+                if (!(await okToPasteBig(text))) return;
+                if (!converted) html = escapeHTML(normalizePasted(text)).replace(/\n/g, '<br>');
+                el.focus();
+                insertHtmlAtRange(el, range, html);
+            } else if (!document.execCommand('insertHTML', false, html)) {
+                insertHtmlAtRange(el, range, html);
             }
-            markDirty(); commit(); refreshPlaceholders();
-            toast('✅ 已將 Markdown 轉成真格式（唔啱可以 Ctrl+Z）');
+            markDirty(); commit(); refreshPlaceholders(); scheduleAutoSave();
+            toast(converted ? '✅ 已將 Markdown 轉成真格式（唔啱可以 Ctrl+Z）' : '✅ 已貼上（唔啱可以 Ctrl+Z）');
         });
 
         /* ===================================================================
@@ -1249,7 +1389,7 @@
 
             // 訪客預設：呢個係會存落雲端嘅 .active class
             const stateBtn = mkBtn('btn-state', '', '', null);
-            stateBtn.onclick = () => { flushTyping(); box.classList.toggle('active'); syncStateBtn(box); markDirty(); commit(); };
+            stateBtn.onclick = () => { flushTyping(); box.classList.toggle('active'); syncStateBtn(box); markDirty(); commit(); scheduleAutoSave(); };
             left.appendChild(dragHandle); left.appendChild(foldBtn); left.appendChild(stateBtn);
 
             // --- 右邊：變為子頁面、儲存、刪除 ---
@@ -1260,15 +1400,18 @@
                 () => createSubPageFromSelection(box), true));
             right.appendChild(mkBtn('btn-save-box', '💾', '即刻儲存（唔會離開編輯模式）',
                 function () { quickSave(this); }, true));
-            right.appendChild(mkBtn('btn-delete-box', '🗑️', '刪除呢個區塊（撳 ↩️ 或 Ctrl+Z 可以復原）', () => {
-                if (!confirm('確定要刪除呢個區塊？\n（撳錯咗可以用 ↩️ 復原 / Ctrl+Z 救返）')) return;
+            right.appendChild(mkBtn('btn-delete-box', '🗑️', '刪除呢個區塊（撳 ↩️ 或 Ctrl+Z 可以復原）', async () => {
+                if (!(await kcConfirm('確定要刪除呢個區塊？\n（撳錯咗可以用 ↩️ 復原 / Ctrl+Z 救返）'))) return;
                 flushTyping();
                 box.remove(); markDirty(); commit();
-                toast('🗑️ 已刪除（Ctrl+Z 可復原）');
+                // ⚠ 以前刪完區塊係唔會儲存嘅：要等你撳出面、切 tab 或者撳 💾 先寫落雲端。
+                // 中途 browser hang / 強制關機，刪除就冇咗，下次開返嗰啲區塊又會「翻生」。
+                scheduleAutoSave();
+                toast('🗑️ 已刪除，會自動儲存（Ctrl+Z 可復原）');
             }, true));
 
             box.ondragstart = () => box.classList.add('dragging');
-            box.ondragend = () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); markDirty(); commit(); };
+            box.ondragend = () => { box.classList.remove('dragging'); box.setAttribute('draggable', 'false'); markDirty(); commit(); scheduleAutoSave(); };
 
             toolbar.appendChild(left); toolbar.appendChild(right);
             box.insertBefore(toolbar, box.firstChild);
@@ -1348,9 +1491,18 @@
             return (t === "" || t === "請輸入文章總標題") ? "" : pageMainTitle.innerHTML;
         }
 
+        // Firebase 一個值最多 10MB：超過咗寫唔入，與其等佢報個難明嘅錯，不如自己講清楚
+        function tooBigToSave(contentHTML) {
+            const bytes = byteSize(contentHTML);
+            if (bytes <= FIREBASE_MAX_BYTES) return false;
+            toast(`❌ 存唔到：成頁有 ${fmtSize(bytes)}，超過 Firebase 一頁 10 MB 上限。請刪走或者搬走部分內容去子頁面。`, true);
+            return true;
+        }
+
         function quickSave(btn, msg) {
             const titleText = getCleanTitle();
             const contentHTML = getCleanContentHTML();
+            if (tooBigToSave(contentHTML)) { isDirty = true; return Promise.resolve(); }
             isDirty = false;   // 即刻清走，免得連續觸發自動儲存時寫多幾次
             return Promise.all([
                 db.ref(P_TITLES + '/' + pageId).set(titleText),
@@ -1430,6 +1582,7 @@
         saveBtn.addEventListener('click', () => {
             const titleText = getCleanTitle();
             const contentHTML = getCleanContentHTML();
+            if (tooBigToSave(contentHTML)) return;   // 唔好離開編輯模式，唔係改咗嘅嘢會冇咗
             disableEditing();
             db.ref(P_TITLES + '/' + pageId).set(titleText);
             db.ref(P_PAGES + '/' + pageId).set(contentHTML).then(() => {
@@ -1470,15 +1623,15 @@
         document.getElementById('bbExpand').addEventListener('click', () => {
             document.querySelectorAll('#cabinetContent .box').forEach(b => setBoxOpen(b, true));
         });
-        document.getElementById('bbAllCollapse').addEventListener('click', () => {
-            if (!confirm('將所有區塊嘅「訪客預設」一次過設為縮埋？\n（之後仲可以逐個撳返展開）')) return;
+        document.getElementById('bbAllCollapse').addEventListener('click', async () => {
+            if (!(await kcConfirm('將所有區塊嘅「訪客預設」一次過設為縮埋？\n（之後仲可以逐個撳返展開）'))) return;
             document.querySelectorAll('#cabinetContent .box').forEach(b => {
                 const header = b.querySelector('.box-header');
                 if (header && header.textContent.trim() === '') return; // 冇標題嘅一定要留返展開
                 b.classList.remove('active');
                 syncStateBtn(b);
             });
-            markDirty(); commit(); toast('已全部設為「訪客預設：縮埋」（Ctrl+Z 可復原）');
+            markDirty(); commit(); scheduleAutoSave(); toast('已全部設為「訪客預設：縮埋」（Ctrl+Z 可復原）');
         });
         document.getElementById('bbTop').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
@@ -1635,7 +1788,7 @@
                 const header = box.querySelector('.box-header');
                 const old = (header.textContent || '').replace(/🔍 \d+ 個$/, '').trim();
                 if (old && !isPlaceholderTitle(old)) {
-                    if (!confirm(`AI 建議嘅標題：\n\n「${title}」\n\n呢個區塊而家叫「${old}」，要用新嘅取代佢？`)) return;
+                    if (!(await kcConfirm(`AI 建議嘅標題：\n\n「${title}」\n\n呢個區塊而家叫「${old}」，要用新嘅取代佢？`))) return;
                 }
                 setBoxTitle(box, title);
                 markDirty(); commit(); refreshPlaceholders();
@@ -1658,8 +1811,8 @@
             if (!boxes.length) { toast('冇區塊需要生成標題（有內容但冇標題嗰啲先會處理）'); return; }
             if (!aiCfgOK()) { toast('請先撳右下角 ✨ → ⚙️ 設定 API', true); return; }
             const lang = titleLang();
-            if (!confirm(`有 ${boxes.length} 個區塊有內容但冇標題。\n用 AI 一次過幫佢哋生成${lang === 'en' ? '英文' : '中文'}標題？\n\n`
-                + `· 只會處理呢 ${boxes.length} 個，已經有標題嘅一個都唔會郁\n· 做完可以撳 Ctrl+Z 一次過復原`)) return;
+            if (!(await kcConfirm(`有 ${boxes.length} 個區塊有內容但冇標題。\n用 AI 一次過幫佢哋生成${lang === 'en' ? '英文' : '中文'}標題？\n\n`
+                + `· 只會處理呢 ${boxes.length} 個，已經有標題嘅一個都唔會郁\n· 做完可以撳 Ctrl+Z 一次過復原`))) return;
 
             const btn = document.getElementById('bbTitles');
             btn.disabled = true;
