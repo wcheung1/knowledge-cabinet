@@ -76,6 +76,36 @@
         #toast { display: none; position: fixed; right: 20px; bottom: 20px; background: #2c3e50; color: #fff; padding: 12px 18px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 9999; }
         #busyOverlay { display: none; position: fixed; inset: 0; background: rgba(44,62,80,0.55); z-index: 10000; align-items: center; justify-content: center; }
         #busyOverlay .busy-box { background: #fff; padding: 22px 30px; border-radius: 10px; font-weight: bold; color: #2c3e50; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; max-width: 320px; }
+    
+        /* ===================== 🔎 字體縮放（KC Zoom） =====================
+           用 CSS zoom 縮放成個內容區：同瀏覽器 pinch-zoom 唔同，zoom 會令文字
+           「重新排版」—— 縮細嗰陣一行自然出多啲字，放大嗰陣唔會要左右拖。
+           檔位由 JS 設定 --kc-zoom；選擇會記喺 localStorage，三個頁面共用。 */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        .container { zoom: var(--kc-zoom, 1); }
+
+        #kcZoomBar { position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 9980;
+                     display: none; align-items: stretch; background: rgba(44,62,80,0.92); color: #fff;
+                     border-radius: 22px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); overflow: hidden;
+                     font-family: "Helvetica Neue", Arial, sans-serif; user-select: none; -webkit-user-select: none; }
+        #kcZoomBar.kc-on { display: flex; }
+        #kcZoomBar button { background: none; border: none; color: #fff; cursor: pointer; font-weight: bold;
+                            min-width: 40px; height: 38px; padding: 0 8px; line-height: 1; touch-action: manipulation; }
+        #kcZoomBar button:active { background: rgba(255,255,255,0.18); }
+        #kcZoomBar button:disabled { opacity: 0.3; cursor: default; }
+        #kcZoomBar .kc-z-minus { font-size: 13px; }
+        #kcZoomBar .kc-z-plus  { font-size: 19px; }
+        #kcZoomBar .kc-z-val   { font-size: 12px; min-width: 50px; border-left: 1px solid rgba(255,255,255,0.2);
+                                 border-right: 1px solid rgba(255,255,255,0.2); font-weight: normal; }
+
+        /* ===================== 📱 手機：收窄外圍留白 ===================== */
+        @media (max-width: 680px) {
+            body { padding: 8px; }
+            .container { padding: 14px 12px; border-radius: 8px; }
+            .category { padding: 10px; }
+            .link-list { padding: 6px; }
+            .link-item { padding: 10px 12px; }
+        }
     </style>
 </head>
 <body>
@@ -1083,6 +1113,71 @@
             document.querySelectorAll('.link-item a').forEach(el => el.onclick = null);
             document.querySelectorAll('.is-empty').forEach(el => el.classList.remove('is-empty')); 
         }
+    </script>
+
+    <!-- 🔎 字體縮放控制（A− / 百分比 / A+）；撳中間個百分比即還原預設 -->
+    <div id="kcZoomBar" role="group" aria-label="字體大細">
+        <button type="button" class="kc-z-minus" id="kcZoomOut" aria-label="縮細字體" title="縮細（一行出多啲字）">A−</button>
+        <button type="button" class="kc-z-val" id="kcZoomVal" aria-label="還原預設大細" title="撳一下還原預設">100%</button>
+        <button type="button" class="kc-z-plus" id="kcZoomIn" aria-label="放大字體" title="放大">A+</button>
+    </div>
+    <script>
+    (function () {
+        'use strict';
+        // 瀏覽器唔支援 CSS zoom（好舊嘅 Firefox）就唔出掣，免得掣撳咗冇反應
+        try { if (!(window.CSS && CSS.supports && CSS.supports('zoom', '1'))) return; } catch (e) { return; }
+
+        var STEPS = [60, 70, 80, 90, 100, 115, 130, 150];   // 可揀嘅檔位（%）
+        var KEY = 'kc_zoom_pct';                             // 三個頁面共用同一個 key
+        var bar = document.getElementById('kcZoomBar');
+        var bOut = document.getElementById('kcZoomOut');
+        var bIn  = document.getElementById('kcZoomIn');
+        var bVal = document.getElementById('kcZoomVal');
+        if (!bar) return;
+
+        // 未揀過：手機（窄螢幕）預設 90%，桌面 100%
+        function defaultPct() { return (window.innerWidth <= 680) ? 90 : 100; }
+
+        function load() {
+            try {
+                var v = parseInt(localStorage.getItem(KEY), 10);
+                if (STEPS.indexOf(v) !== -1) return v;
+            } catch (e) {}
+            return defaultPct();
+        }
+        function save(v) { try { localStorage.setItem(KEY, String(v)); } catch (e) {} }
+        function clearSaved() { try { localStorage.removeItem(KEY); } catch (e) {} }
+
+        var cur = load();
+
+        function apply() {
+            document.documentElement.style.setProperty('--kc-zoom', String(cur / 100));
+            bVal.textContent = cur + '%';
+            bOut.disabled = (cur <= STEPS[0]);
+            bIn.disabled  = (cur >= STEPS[STEPS.length - 1]);
+        }
+        function step(dir) {
+            var i = STEPS.indexOf(cur);
+            if (i === -1) { // 萬一 cur 唔喺檔位入面，揀最近嗰個
+                i = 0;
+                for (var k = 0; k < STEPS.length; k++) if (Math.abs(STEPS[k] - cur) < Math.abs(STEPS[i] - cur)) i = k;
+            }
+            var n = Math.max(0, Math.min(STEPS.length - 1, i + dir));
+            cur = STEPS[n]; save(cur); apply();
+        }
+
+        bOut.addEventListener('click', function () { step(-1); });
+        bIn.addEventListener('click',  function () { step(+1); });
+        bVal.addEventListener('click', function () { clearSaved(); cur = defaultPct(); apply(); });
+
+        // 其他頁面（另一個 tab）改咗檔位，呢頁即時跟
+        window.addEventListener('storage', function (e) {
+            if (e.key === KEY) { cur = load(); apply(); }
+        });
+
+        apply();
+        bar.classList.add('kc-on');
+    })();
     </script>
 </body>
 </html>
